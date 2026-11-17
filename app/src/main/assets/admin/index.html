@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="zh-CN"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#0b1020"><title>TVLive Hub · 频道管理</title>
+<style>
+:root{color-scheme:dark;--bg:#0b1020;--panel:#151e31;--line:#2b3a55;--text:#f3f6fc;--muted:#9ba9c2;--blue:#5b8cff;--red:#61313b}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:15px system-ui,-apple-system,"Segoe UI",sans-serif}
+header{padding:20px max(18px,calc((100vw - 1120px)/2));border-bottom:1px solid var(--line);display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
+h1{font-size:21px;margin:0}header small,.muted{color:var(--muted)}main{max-width:1120px;margin:24px auto;padding:0 18px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:15px;padding:18px;margin-bottom:16px}
+.grid{display:grid;grid-template-columns:minmax(220px,.85fr) minmax(320px,1.5fr);gap:16px}
+input,select{width:100%;background:#0d1628;color:var(--text);border:1px solid var(--line);border-radius:9px;padding:11px;margin:6px 0 12px;font:inherit}
+label{font-size:13px;color:var(--muted)}button{border:0;border-radius:9px;padding:10px 14px;background:var(--blue);color:white;font-weight:650;cursor:pointer;margin:3px}
+button.secondary{background:#263650}button.danger{background:var(--red)}.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.item{border:1px solid var(--line);border-radius:10px;padding:12px;margin:9px 0;cursor:pointer}.item.active{border-color:var(--blue);background:#1a2a47}
+.item strong{display:block}.item small{color:var(--muted)}.source{padding:12px 0;border-bottom:1px solid var(--line);overflow-wrap:anywhere}
+.hidden{display:none!important}.status{color:#f4cc83;font-size:13px}.toolbar{display:flex;justify-content:space-between;align-items:center;gap:10px}
+#login{max-width:420px;margin:10vh auto}.hint{font-size:13px;color:var(--muted);line-height:1.6}
+@media(max-width:720px){.grid{grid-template-columns:1fr}main{margin-top:15px}}
+</style></head><body>
+<header><div><h1>TVLive Hub</h1><small>本机频道与直播源管理</small></div><span class="muted">局域网管理 · 配置保存在电视</span></header>
+<main>
+<section id="login" class="panel"><h2>连接电视</h2><p class="muted">输入电视屏幕上显示的 6 位配对码。此网页只管理配置，不转发视频。</p>
+<label>电视配对码</label><input id="pairCode" inputmode="numeric" maxlength="6" placeholder="例如 123456">
+<button onclick="pair()">连接</button><p id="loginError" class="status"></p></section>
+<section id="app" class="hidden">
+<div class="toolbar panel"><div><strong>频道管理</strong><div class="muted">每个频道可单独配置多个直播源</div></div><button onclick="showNewChannel()">＋ 添加频道</button></div>
+<div class="grid"><div class="panel"><h3>频道列表</h3><div id="channels"></div></div>
+<div class="panel"><div id="empty"><h3>选择一个频道</h3><p class="muted">选择左侧频道，管理它自己的直播源。</p></div>
+<div id="detail" class="hidden"><div class="toolbar"><div><h2 id="channelTitle"></h2><span id="channelMeta" class="muted"></span></div><div><button class="secondary" onclick="editChannel()">编辑</button><button class="danger" onclick="deleteChannel()">删除</button></div></div>
+<hr style="border-color:var(--line);margin:18px 0"><h3>添加直播源</h3>
+<form id="sourceForm" onsubmit="saveSource(event)">
+<label>来源名称</label><input id="sourceName" required placeholder="例如：官方网页 / 备用源">
+<label>来源类型</label><select id="sourceType"><option value="HLS">HLS（Media3）</option><option value="DASH">DASH（Media3）</option><option value="WEB">官方网页（WebView）</option></select>
+<label>直播源地址</label><input id="sourceUrl" type="url" required placeholder="https://...">
+<label>优先级（数字越小越优先）</label><input id="sourcePriority" type="number" min="1" max="9999" value="100">
+<div class="row"><button type="submit">保存直播源</button><button type="reset" class="secondary">清空</button></div></form>
+<h3 style="margin-top:25px">此频道的直播源</h3><div id="sources"></div></div>
+<div id="channelEditor" class="hidden"><h3 id="channelEditorTitle">添加频道</h3>
+<label>频道名称</label><input id="channelName" placeholder="例如：CCTV-1 综合">
+<label>分类</label><input id="channelCategory" placeholder="例如：央视、卫视、地方台">
+<div class="row"><button onclick="saveChannel()">保存</button><button class="secondary" onclick="cancelChannelEdit()">取消</button></div></div>
+</div></div>
+<p class="hint">请只添加你有权访问的官方或合法来源。新来源默认“待验证”；网页能打开不代表视频一定能播放或免费。登录、会员、DRM、地区限制不会被绕过。</p>
+</section></main>
+<script>
+let token=sessionStorage.getItem("tvhubToken")||"",channels=[],selected=null,editingChannel=false;
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+async function api(path,method="GET",body=null){
+ const r=await fetch(path,{method,headers:{"Content-Type":"application/json","Authorization":"Bearer "+token},body:body?JSON.stringify(body):undefined});
+ const d=await r.json().catch(()=>({}));if(!r.ok)throw Error(d.error||("请求失败："+r.status));return d;
+}
+async function pair(){try{
+ const r=await fetch("/api/pair",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({code:$("pairCode").value.trim()})});
+ const d=await r.json();if(!r.ok)throw Error(d.error||"配对失败");
+ token=d.token;sessionStorage.setItem("tvhubToken",token);$("login").classList.add("hidden");$("app").classList.remove("hidden");await load();
+ }catch(e){$("loginError").textContent=e.message;}}
+async function load(){try{
+ const d=await api("/api/channels");channels=d.channels||[];
+ if(selected)selected=channels.find(c=>c.id===selected.id)||null;
+ renderChannels();renderDetail();
+ }catch(e){logout(e.message);}}
+function logout(message=""){token="";sessionStorage.removeItem("tvhubToken");$("app").classList.add("hidden");$("login").classList.remove("hidden");$("loginError").textContent=message;}
+function renderChannels(){
+ $("channels").innerHTML=channels.length?channels.map(c=>'<div class="item '+(selected&&selected.id===c.id?'active':'')+'" onclick="selectChannel(\''+c.id+'\')"><strong>'+esc(c.name)+'</strong><small>'+esc(c.category)+' · '+c.sources.length+' 个来源</small></div>').join(""):'<p class="muted">还没有频道，点击“添加频道”创建。</p>';
+}
+function selectChannel(id){selected=channels.find(c=>c.id===id)||null;renderChannels();renderDetail();}
+function renderDetail(){
+ const has=!!selected;$("empty").classList.toggle("hidden",has);$("detail").classList.toggle("hidden",!has);$("channelEditor").classList.add("hidden");if(!has)return;
+ $("channelTitle").textContent=selected.name;$("channelMeta").textContent=selected.category+" · "+selected.sources.length+" 个来源";
+ $("sources").innerHTML=selected.sources.length?selected.sources.map(s=>'<div class="source"><div class="toolbar"><strong>'+esc(s.name)+'</strong><span class="status">待验证</span></div><div class="muted">'+esc(s.type)+' · 优先级 '+s.priority+' · '+(s.enabled?'已启用':'已停用')+'</div><div>'+esc(s.url)+'</div><div class="row"><button class="secondary" onclick="toggleSource(\''+s.id+'\','+(!s.enabled)+')">'+(s.enabled?'停用':'启用')+'</button><button class="danger" onclick="removeSource(\''+s.id+'\')">删除</button></div></div>').join(""):'<p class="muted">这个频道还没有直播源。</p>';
+}
+function showNewChannel(){selected=null;editingChannel=false;renderChannels();$("empty").classList.add("hidden");$("detail").classList.add("hidden");$("channelEditor").classList.remove("hidden");$("channelEditorTitle").textContent="添加频道";$("channelName").value="";$("channelCategory").value="";}
+function editChannel(){editingChannel=true;$("detail").classList.add("hidden");$("channelEditor").classList.remove("hidden");$("channelEditorTitle").textContent="编辑频道";$("channelName").value=selected.name;$("channelCategory").value=selected.category;}
+function cancelChannelEdit(){$("channelEditor").classList.add("hidden");renderDetail();}
+async function saveChannel(){const body={name:$("channelName").value.trim(),category:$("channelCategory").value.trim()};if(!body.name)return alert("请填写频道名称");try{
+ if(editingChannel)await api("/api/channels/"+selected.id,"PUT",body);else selected=await api("/api/channels","POST",body);await load();
+ }catch(e){alert(e.message);}}
+async function deleteChannel(){if(!confirm("删除频道及其全部直播源？"))return;try{await api("/api/channels/"+selected.id,"DELETE");selected=null;await load();}catch(e){alert(e.message);}}
+async function saveSource(e){e.preventDefault();if(!selected)return;const body={name:$("sourceName").value.trim(),type:$("sourceType").value,url:$("sourceUrl").value.trim(),priority:Number($("sourcePriority").value)||100};try{
+ await api("/api/channels/"+selected.id+"/sources","POST",body);$("sourceForm").reset();$("sourcePriority").value=100;await load();
+ }catch(e){alert(e.message);}}
+async function toggleSource(id,enabled){const s=selected.sources.find(x=>x.id===id);try{await api("/api/channels/"+selected.id+"/sources/"+id,"PUT",Object.assign({},s,{enabled}));await load();}catch(e){alert(e.message);}}
+async function removeSource(id){if(!confirm("删除这个直播源？"))return;try{await api("/api/channels/"+selected.id+"/sources/"+id,"DELETE");await load();}catch(e){alert(e.message);}}
+if(token){$("login").classList.add("hidden");$("app").classList.remove("hidden");load();}
+const qrCode=new URLSearchParams(location.search).get("pair");if(qrCode){$("pairCode").value=qrCode;history.replaceState({},"",location.pathname);pair();}
+</script></body></html>

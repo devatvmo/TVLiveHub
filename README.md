@@ -1,25 +1,31 @@
 # TVLive Hub
 
-Android TV 综合电视直播应用（工程代号）。
+Android TV 综合电视直播应用。
 
 ## 当前版本
-0.1.0 — 开发测试工程骨架，不是稳定版。
+0.2.0 — 局域网网页管理首轮开发测试版，不是稳定版。
 
-## 目标
-- Android TV / S905X5M，首轮实测设备 Android 14。
-- Media3 + WebView。
-- 一个频道支持多个免费信号源。
-- 保留咪咕视频，同时支持其他平台的合法免费来源。
+## 产品方向
+- Android TV / Amlogic S905X5M，首轮目标 Android 14。
+- 电视端播放，手机/电脑浏览器管理频道。
+- 每个频道支持独立添加多个直播源。
+- Media3 + WebView；只播放平台允许访问的来源。
+- 保留咪咕视频来源方向，支持其他平台的合法免费来源。
 - 十字键和飞鼠操作。
-- 电视本机播放，不做局域网转发。
+- 配置保存在电视本机；管理网页不代理或转发视频流。
+
+## 网页管理
+启动应用后进入“网页管理”，使用手机或电脑连接同一局域网，扫描二维码或输入访问地址，再输入电视显示的 6 位配对码。可以新增频道，并为每个频道独立添加、停用和删除 HLS、DASH 或官方网页来源。
+
+详细说明见 docs/WEB_ADMIN.md。
 
 ## 构建
-使用 Android Studio 打开本目录，安装 Android SDK Platform 35 与 JDK 17，等待 Gradle Sync 后运行 `:app:assembleDebug`。
+使用 Android Studio 打开本目录，安装 Android SDK Platform 35 与 JDK 17，等待 Gradle Sync 后运行 :app:assembleDebug。
 
-生成 APK：`app/build/outputs/apk/debug/app-debug.apk`
+生成 APK：app/build/outputs/apk/debug/app-debug.apk
 
 ## 当前限制
-本版本提供工程骨架、首页、数据模型、免费来源过滤和双播放器基础组件。没有加入未经验证的直播地址。完整播放导航、来源选择、自动故障切换和实机兼容性测试将在后续迭代完成。
+0.2.0 首轮实现频道与来源的网页管理 CRUD；新增来源默认待验证。来源可达性、实际播放测试、配置接入播放列表、自动故障切换和实机兼容性仍待后续开发与验收。
 
 ## 合规
 不绕过登录、会员、地区限制或 DRM，不提取受保护媒体流。

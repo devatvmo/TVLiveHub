@@ -6,7 +6,6 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -19,6 +18,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import tv.livehub.app.admin.AdminAccessScreen
+import tv.livehub.app.admin.LocalAdminServer
 import tv.livehub.app.data.ChannelRepository
 import tv.livehub.app.model.Channel
 import tv.livehub.app.player.OfficialWebViewPlayer
@@ -30,33 +31,54 @@ private val Muted = Color(0xFF9BA9C2)
 private const val CCTV1_LIVE_PAGE = "https://tv.cctv.com/live/cctv1/"
 
 class MainActivity : ComponentActivity() {
+    private var adminServer: LocalAdminServer? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val server = LocalAdminServer(this)
+        runCatching { server.startServer(); adminServer = server }
         val channels = ChannelRepository().getVisibleChannels()
         setContent {
             MaterialTheme(colorScheme = darkColorScheme(
                 primary = Accent, background = AppBg, surface = Panel,
                 onBackground = Color.White, onSurface = Color.White
             )) {
-                TVLiveApp(channels)
+                TVLiveApp(channels, adminServer?.accessInfo())
             }
         }
     }
-}
 
-@Composable
-private fun TVLiveApp(channels: List<Channel>) {
-    var showCctvPlayer by remember { mutableStateOf(false) }
-    BackHandler(enabled = showCctvPlayer) { showCctvPlayer = false }
-    if (showCctvPlayer) {
-        CctvTestPlayer(onBack = { showCctvPlayer = false })
-    } else {
-        TVLiveHome(channels, onOpenCctv = { showCctvPlayer = true })
+    override fun onDestroy() {
+        adminServer?.stop()
+        adminServer = null
+        super.onDestroy()
     }
 }
 
 @Composable
-private fun TVLiveHome(channels: List<Channel>, onOpenCctv: () -> Unit) {
+private fun TVLiveApp(channels: List<Channel>, adminInfo: LocalAdminServer.AccessInfo?) {
+    var showCctvPlayer by remember { mutableStateOf(false) }
+    var showAdmin by remember { mutableStateOf(false) }
+    BackHandler(enabled = showCctvPlayer || showAdmin) {
+        showCctvPlayer = false
+        showAdmin = false
+    }
+    when {
+        showCctvPlayer -> CctvTestPlayer(onBack = { showCctvPlayer = false })
+        showAdmin -> AdminAccessScreen(
+            info = adminInfo ?: LocalAdminServer.AccessInfo(emptyList(), "服务启动失败", LocalAdminServer.PORT),
+            onBack = { showAdmin = false }
+        )
+        else -> TVLiveHome(
+            channels = channels,
+            onOpenCctv = { showCctvPlayer = true },
+            onOpenAdmin = { showAdmin = true }
+        )
+    }
+}
+
+@Composable
+private fun TVLiveHome(channels: List<Channel>, onOpenCctv: () -> Unit, onOpenAdmin: () -> Unit) {
     var selectedCategory by remember { mutableStateOf("全部") }
     val categories = listOf("全部", "央视", "卫视", "内蒙古")
     val visible = channels.filter { selectedCategory == "全部" || it.category == selectedCategory }
@@ -71,10 +93,13 @@ private fun TVLiveHome(channels: List<Channel>, onOpenCctv: () -> Unit) {
                 Text("TVLive Hub", style = MaterialTheme.typography.headlineLarge, color = Color.White)
                 Text("免费电视直播 · 多平台信号源", color = Muted)
             }
-            Surface(color = Color(0xFF1D2A43), shape = RoundedCornerShape(50)) {
-                Text("开发测试版 0.1.1",
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 9.dp),
-                    color = Color(0xFFBBD0FF), style = MaterialTheme.typography.labelLarge)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                Button(onClick = onOpenAdmin) { Text("网页管理") }
+                Surface(color = Color(0xFF1D2A43), shape = RoundedCornerShape(50)) {
+                    Text("开发测试版 0.2.0",
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 9.dp),
+                        color = Color(0xFFBBD0FF), style = MaterialTheme.typography.labelLarge)
+                }
             }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -88,17 +113,24 @@ private fun TVLiveHome(channels: List<Channel>, onOpenCctv: () -> Unit) {
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
             ) {
-                Text("官方直播测试", style = MaterialTheme.typography.headlineMedium, color = Color.White)
-                Text("先接入央视网 CCTV-1 官方直播页面，验证电视端网页播放能力。",
+                Text("频道列表尚未配置", style = MaterialTheme.typography.headlineMedium, color = Color.White)
+                Text("可以先用手机或电脑打开网页管理，为每个频道添加自己的直播源。",
                     color = Muted, style = MaterialTheme.typography.bodyLarge)
                 Spacer(Modifier.height(18.dp))
-                TestChannelCard(
-                    title = "CCTV-1 综合",
-                    subtitle = "央视网官方直播页 · 免费状态待实机验证",
-                    onClick = onOpenCctv
-                )
+                Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                    TestChannelCard(
+                        title = "网页管理入口",
+                        subtitle = "手机/电脑添加频道与直播源",
+                        onClick = onOpenAdmin
+                    )
+                    TestChannelCard(
+                        title = "CCTV-1 综合",
+                        subtitle = "央视网官方直播页 · 免费状态待实机验证",
+                        onClick = onOpenCctv
+                    )
+                }
                 Spacer(Modifier.height(16.dp))
-                Text("其他频道只会在确认免费且合法可播放后加入频道列表。",
+                Text("新添加来源默认待验证，不会自动认定为免费或可播放。",
                     color = Color(0xFFBBD0FF))
             }
         } else {
@@ -148,7 +180,7 @@ private fun TestChannelCard(title: String, subtitle: String, onClick: () -> Unit
         color = if (focused) Color(0xFF263D65) else Panel,
         shape = RoundedCornerShape(18.dp),
         border = if (focused) BorderStroke(3.dp, Accent) else BorderStroke(1.dp, Color(0xFF34435C)),
-        modifier = Modifier.widthIn(min = 360.dp, max = 620.dp)
+        modifier = Modifier.widthIn(min = 340.dp, max = 520.dp)
             .height(116.dp).onFocusChanged { focused = it.isFocused }
     ) {
         Row(Modifier.fillMaxSize().padding(horizontal = 24.dp, vertical = 18.dp),
@@ -158,7 +190,7 @@ private fun TestChannelCard(title: String, subtitle: String, onClick: () -> Unit
                 Text(title, color = Color.White, style = MaterialTheme.typography.titleLarge)
                 Text(subtitle, color = Muted, style = MaterialTheme.typography.bodySmall)
             }
-            Text("播放测试  ›", color = Color(0xFFBBD0FF))
+            Text("打开  ›", color = Color(0xFFBBD0FF))
         }
     }
 }
