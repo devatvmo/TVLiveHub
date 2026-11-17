@@ -2,6 +2,7 @@ package tv.livehub.app
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -20,11 +21,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import tv.livehub.app.data.ChannelRepository
 import tv.livehub.app.model.Channel
+import tv.livehub.app.player.OfficialWebViewPlayer
 
 private val AppBg = Color(0xFF0B1020)
 private val Panel = Color(0xFF151E31)
 private val Accent = Color(0xFF5B8CFF)
 private val Muted = Color(0xFF9BA9C2)
+private const val CCTV1_LIVE_PAGE = "https://tv.cctv.com/live/cctv1/"
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -34,13 +37,26 @@ class MainActivity : ComponentActivity() {
             MaterialTheme(colorScheme = darkColorScheme(
                 primary = Accent, background = AppBg, surface = Panel,
                 onBackground = Color.White, onSurface = Color.White
-            )) { TVLiveHome(channels) }
+            )) {
+                TVLiveApp(channels)
+            }
         }
     }
 }
 
 @Composable
-private fun TVLiveHome(channels: List<Channel>) {
+private fun TVLiveApp(channels: List<Channel>) {
+    var showCctvPlayer by remember { mutableStateOf(false) }
+    BackHandler(enabled = showCctvPlayer) { showCctvPlayer = false }
+    if (showCctvPlayer) {
+        CctvTestPlayer(onBack = { showCctvPlayer = false })
+    } else {
+        TVLiveHome(channels, onOpenCctv = { showCctvPlayer = true })
+    }
+}
+
+@Composable
+private fun TVLiveHome(channels: List<Channel>, onOpenCctv: () -> Unit) {
     var selectedCategory by remember { mutableStateOf("全部") }
     val categories = listOf("全部", "央视", "卫视", "内蒙古")
     val visible = channels.filter { selectedCategory == "全部" || it.category == selectedCategory }
@@ -56,7 +72,7 @@ private fun TVLiveHome(channels: List<Channel>) {
                 Text("免费电视直播 · 多平台信号源", color = Muted)
             }
             Surface(color = Color(0xFF1D2A43), shape = RoundedCornerShape(50)) {
-                Text("开发测试版 0.1.0",
+                Text("开发测试版 0.1.1",
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 9.dp),
                     color = Color(0xFFBBD0FF), style = MaterialTheme.typography.labelLarge)
             }
@@ -67,16 +83,23 @@ private fun TVLiveHome(channels: List<Channel>) {
             }
         }
         if (visible.isEmpty()) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("频道库正在准备中", style = MaterialTheme.typography.headlineMedium,
-                        color = Color.White)
-                    Text("首版不会展示未经验证的频道。确认免费且可正常播放的信号源后，频道会出现在这里。",
-                        color = Muted, style = MaterialTheme.typography.bodyLarge)
-                    Text("支持咪咕视频、央视频、央视网及其他合法免费来源",
-                        color = Color(0xFFBBD0FF))
-                }
+            Column(
+                modifier = Modifier.fillMaxWidth().weight(1f),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Text("官方直播测试", style = MaterialTheme.typography.headlineMedium, color = Color.White)
+                Text("先接入央视网 CCTV-1 官方直播页面，验证电视端网页播放能力。",
+                    color = Muted, style = MaterialTheme.typography.bodyLarge)
+                Spacer(Modifier.height(18.dp))
+                TestChannelCard(
+                    title = "CCTV-1 综合",
+                    subtitle = "央视网官方直播页 · 免费状态待实机验证",
+                    onClick = onOpenCctv
+                )
+                Spacer(Modifier.height(16.dp))
+                Text("其他频道只会在确认免费且合法可播放后加入频道列表。",
+                    color = Color(0xFFBBD0FF))
             }
         } else {
             LazyVerticalGrid(
@@ -85,12 +108,58 @@ private fun TVLiveHome(channels: List<Channel>) {
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 items(visible, key = { it.id }) { channel ->
-                    ChannelCard(channel) { /* Playback navigation follows in the next increment. */ }
+                    ChannelCard(channel) { /* Channel playback navigation follows in a later increment. */ }
                 }
             }
         }
-        Text("方向键选择 · OK 确认 · 返回退出", color = Muted,
+        Text("方向键选择 · OK 确认 · 返回返回频道页", color = Muted,
             style = MaterialTheme.typography.labelMedium)
+    }
+}
+
+@Composable
+private fun CctvTestPlayer(onBack: () -> Unit) {
+    Column(Modifier.fillMaxSize().background(Color.Black)) {
+        Row(
+            Modifier.fillMaxWidth().background(Color(0xFF111827)).padding(horizontal = 24.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column {
+                Text("CCTV-1 综合 · 官方网页播放测试", color = Color.White,
+                    style = MaterialTheme.typography.titleLarge)
+                Text("免费状态与设备兼容性尚待实测", color = Color(0xFFFFD28A),
+                    style = MaterialTheme.typography.labelMedium)
+            }
+            Button(onClick = onBack) { Text("返回频道页") }
+        }
+        OfficialWebViewPlayer(
+            url = CCTV1_LIVE_PAGE,
+            modifier = Modifier.fillMaxSize().weight(1f)
+        )
+    }
+}
+
+@Composable
+private fun TestChannelCard(title: String, subtitle: String, onClick: () -> Unit) {
+    var focused by remember { mutableStateOf(false) }
+    Surface(
+        onClick = onClick,
+        color = if (focused) Color(0xFF263D65) else Panel,
+        shape = RoundedCornerShape(18.dp),
+        border = if (focused) BorderStroke(3.dp, Accent) else BorderStroke(1.dp, Color(0xFF34435C)),
+        modifier = Modifier.widthIn(min = 360.dp, max = 620.dp)
+            .height(116.dp).onFocusChanged { focused = it.isFocused }
+    ) {
+        Row(Modifier.fillMaxSize().padding(horizontal = 24.dp, vertical = 18.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(title, color = Color.White, style = MaterialTheme.typography.titleLarge)
+                Text(subtitle, color = Muted, style = MaterialTheme.typography.bodySmall)
+            }
+            Text("播放测试  ›", color = Color(0xFFBBD0FF))
+        }
     }
 }
 
@@ -102,7 +171,7 @@ private fun CategoryChip(label: String, selected: Boolean, onClick: () -> Unit) 
         color = when { focused -> Color(0xFF29477F); selected -> Color(0xFF20365D); else -> Panel },
         shape = RoundedCornerShape(12.dp),
         border = if (focused) BorderStroke(2.dp, Color(0xFF9DBAFF)) else null,
-        modifier = Modifier.onFocusChanged { focused = it.isFocused }.focusable()
+        modifier = Modifier.onFocusChanged { focused = it.isFocused }
     ) {
         Text(label, modifier = Modifier.padding(horizontal = 22.dp, vertical = 12.dp),
             color = Color.White, style = MaterialTheme.typography.titleMedium)
@@ -117,7 +186,7 @@ private fun ChannelCard(channel: Channel, onClick: () -> Unit) {
         color = if (focused) Color(0xFF263D65) else Panel,
         shape = RoundedCornerShape(16.dp),
         border = if (focused) BorderStroke(2.dp, Accent) else null,
-        modifier = Modifier.height(112.dp).onFocusChanged { focused = it.isFocused }.focusable()
+        modifier = Modifier.height(112.dp).onFocusChanged { focused = it.isFocused }
     ) {
         Column(Modifier.fillMaxSize().padding(18.dp),
             verticalArrangement = Arrangement.SpaceBetween) {
