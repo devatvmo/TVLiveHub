@@ -1,6 +1,7 @@
 package tv.livehub.app.player
 
 import android.net.http.SslError
+import android.view.View
 import android.view.ViewGroup
 import android.webkit.SslErrorHandler
 import android.webkit.WebChromeClient
@@ -8,6 +9,7 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.FrameLayout
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -70,6 +72,28 @@ fun OfficialWebViewPlayer(url: String, modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val loading = remember(url) { mutableStateOf(true) }
     val pageError = remember(url) { mutableStateOf(false) }
+    val fullScreen = remember(url) { mutableStateOf(false) }
+    val containerRef = remember(url) { arrayOfNulls<FrameLayout>(1) }
+    val customViewRef = remember(url) { arrayOfNulls<View>(1) }
+    val customCallbackRef = remember(url) { arrayOfNulls<WebChromeClient.CustomViewCallback>(1) }
+
+    fun leaveFullScreen() {
+        val container = containerRef[0]
+        customViewRef[0]?.let { container?.removeView(it) }
+        customViewRef[0] = null
+        container?.let { frame ->
+            val currentWebView = frame.getChildAt(0)
+            if (currentWebView == null) {
+                // The WebView is reattached by AndroidView.update below.
+            }
+        }
+        customCallbackRef[0]?.onCustomViewHidden()
+        customCallbackRef[0] = null
+        fullScreen.value = false
+    }
+
+    BackHandler(enabled = fullScreen.value) { leaveFullScreen() }
+
     val webView = remember(url) {
         WebView(context).apply {
             isFocusable = true
@@ -133,6 +157,29 @@ fun OfficialWebViewPlayer(url: String, modifier: Modifier = Modifier) {
                 override fun onProgressChanged(view: WebView, newProgress: Int) {
                     if (newProgress >= 100) loading.value = false
                 }
+
+                override fun onShowCustomView(view: View, callback: CustomViewCallback) {
+                    val container = containerRef[0]
+                    if (container == null) {
+                        callback.onCustomViewHidden()
+                        return
+                    }
+                    customViewRef[0]?.let { container.removeView(it) }
+                    (view.parent as? ViewGroup)?.removeView(view)
+                    customViewRef[0] = view
+                    customCallbackRef[0] = callback
+                    this@apply.visibility = View.GONE
+                    container.addView(view, FrameLayout.LayoutParams(
+                        FrameLayout.LayoutParams.MATCH_PARENT,
+                        FrameLayout.LayoutParams.MATCH_PARENT
+                    ))
+                    fullScreen.value = true
+                }
+
+                override fun onHideCustomView() {
+                    leaveFullScreen()
+                    this@apply.visibility = View.VISIBLE
+                }
             }
             loadUrl(url)
         }
@@ -140,6 +187,8 @@ fun OfficialWebViewPlayer(url: String, modifier: Modifier = Modifier) {
 
     DisposableEffect(webView) {
         onDispose {
+            customViewRef[0]?.let { containerRef[0]?.removeView(it) }
+            customCallbackRef[0]?.onCustomViewHidden()
             webView.stopLoading()
             webView.loadUrl("about:blank")
             webView.removeAllViews()
@@ -152,6 +201,7 @@ fun OfficialWebViewPlayer(url: String, modifier: Modifier = Modifier) {
             modifier = Modifier.fillMaxSize(),
             factory = { ctx ->
                 FrameLayout(ctx).apply {
+                    containerRef[0] = this
                     addView(webView, FrameLayout.LayoutParams(
                         FrameLayout.LayoutParams.MATCH_PARENT,
                         FrameLayout.LayoutParams.MATCH_PARENT
@@ -160,16 +210,18 @@ fun OfficialWebViewPlayer(url: String, modifier: Modifier = Modifier) {
                 }
             },
             update = { container ->
-                if (webView.parent !== container) {
+                containerRef[0] = container
+                if (customViewRef[0] == null && webView.parent !== container) {
                     (webView.parent as? ViewGroup)?.removeView(webView)
                     container.addView(webView)
+                    webView.visibility = View.VISIBLE
                 }
             }
         )
-        if (loading.value) {
+        if (loading.value && !fullScreen.value) {
             CircularProgressIndicator()
         }
-        if (pageError.value) {
+        if (pageError.value && !fullScreen.value) {
             Text(
                 "央视网页面加载失败，请检查网络或稍后重试",
                 color = Color.White,
