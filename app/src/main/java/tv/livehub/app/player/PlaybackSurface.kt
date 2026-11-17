@@ -81,21 +81,14 @@ fun OfficialWebViewPlayer(url: String, modifier: Modifier = Modifier) {
         val container = containerRef[0]
         customViewRef[0]?.let { container?.removeView(it) }
         customViewRef[0] = null
-        container?.let { frame ->
-            val currentWebView = frame.getChildAt(0)
-            if (currentWebView == null) {
-                // The WebView is reattached by AndroidView.update below.
-            }
-        }
         customCallbackRef[0]?.onCustomViewHidden()
         customCallbackRef[0] = null
         fullScreen.value = false
     }
 
-    BackHandler(enabled = fullScreen.value) { leaveFullScreen() }
-
     val webView = remember(url) {
         WebView(context).apply {
+            val targetWebView = this
             isFocusable = true
             isFocusableInTouchMode = true
             settings.javaScriptEnabled = true
@@ -168,7 +161,7 @@ fun OfficialWebViewPlayer(url: String, modifier: Modifier = Modifier) {
                     (view.parent as? ViewGroup)?.removeView(view)
                     customViewRef[0] = view
                     customCallbackRef[0] = callback
-                    this@apply.visibility = View.GONE
+                    targetWebView.visibility = View.GONE
                     container.addView(view, FrameLayout.LayoutParams(
                         FrameLayout.LayoutParams.MATCH_PARENT,
                         FrameLayout.LayoutParams.MATCH_PARENT
@@ -178,11 +171,16 @@ fun OfficialWebViewPlayer(url: String, modifier: Modifier = Modifier) {
 
                 override fun onHideCustomView() {
                     leaveFullScreen()
-                    this@apply.visibility = View.VISIBLE
+                    targetWebView.visibility = View.VISIBLE
                 }
             }
             loadUrl(url)
         }
+    }
+
+    BackHandler(enabled = fullScreen.value) {
+        webView.visibility = View.VISIBLE
+        leaveFullScreen()
     }
 
     DisposableEffect(webView) {
