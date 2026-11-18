@@ -71,8 +71,6 @@ private fun Media3Surface(
         ExoPlayer.Builder(context).build().apply {
             volume = 0f
             setMediaItem(MediaItem.fromUri(url))
-            playWhenReady = true
-            prepare()
         }
     }
 
@@ -89,6 +87,8 @@ private fun Media3Surface(
             }
         }
         player.addListener(listener)
+        player.playWhenReady = true
+        player.prepare()
         onDispose {
             player.volume = 0f
             player.removeListener(listener)
