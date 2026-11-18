@@ -114,7 +114,8 @@ private fun TvLiveScreen(channels: List<TvChannel>) {
     val selectedChannel = channels[selectedIndex.coerceIn(channels.indices)]
     val rootFocusRequester = remember { FocusRequester() }
     val homeFocusRequester = remember { FocusRequester() }
-    val focusRequesters = remember(channels) { channels.map { FocusRequester() } }
+    val drawerFocusRequester = remember { FocusRequester() }
+    var drawerFocusedIndex by remember { mutableIntStateOf(0) }
 
     BackHandler {
         when {
@@ -127,7 +128,8 @@ private fun TvLiveScreen(channels: List<TvChannel>) {
     LaunchedEffect(page, drawerOpen) {
         delay(120)
         if (page == "home") homeFocusRequester.requestFocus()
-        else if (!drawerOpen) rootFocusRequester.requestFocus()
+        else if (drawerOpen) drawerFocusRequester.requestFocus()
+        else rootFocusRequester.requestFocus()
     }
 
     LaunchedEffect(selectedChannel.id, page) {
@@ -163,7 +165,11 @@ private fun TvLiveScreen(channels: List<TvChannel>) {
             .onPreviewKeyEvent { event ->
                 if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                 when (event.key) {
-                    Key.DirectionLeft -> { drawerOpen = !drawerOpen; true }
+                    Key.DirectionLeft -> {
+                        drawerFocusedIndex = selectedIndex
+                        drawerOpen = !drawerOpen
+                        true
+                    }
                     Key.DirectionUp -> if (drawerOpen) false else {
                         selectedIndex = (selectedIndex - 1 + channels.size) % channels.size
                         infoVisible = true
@@ -219,8 +225,10 @@ private fun TvLiveScreen(channels: List<TvChannel>) {
                 ChannelDrawer(
                     channels = channels,
                     selectedIndex = selectedIndex,
-                    focusRequesters = focusRequesters,
-                    onFocused = { selectedIndex = it },
+                    focusRequester = drawerFocusRequester,
+                    focusedIndex = drawerFocusedIndex,
+                    onMoveFocus = { drawerFocusedIndex = it },
+                    onClose = { drawerOpen = false },
                     onSelect = {
                         selectedIndex = it
                         drawerOpen = false
@@ -289,7 +297,6 @@ private fun HomeScreen(
                 channels.forEachIndexed { index, channel ->
                     val focused = focusedIndex == index
                     Surface(
-                        onClick = { onOpenLive(index) },
                         color = if (focused) Color(0xFF244875) else Panel,
                         border = if (focused) BorderStroke(2.dp, Accent) else null,
                         shape = RoundedCornerShape(16.dp),
@@ -366,52 +373,45 @@ private fun ChannelInfoOverlay(
 private fun ChannelDrawer(
     channels: List<TvChannel>,
     selectedIndex: Int,
-    focusRequesters: List<FocusRequester>,
-    onFocused: (Int) -> Unit,
+    focusRequester: FocusRequester,
+    focusedIndex: Int,
+    onMoveFocus: (Int) -> Unit,
+    onClose: () -> Unit,
     onSelect: (Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    LaunchedEffect(selectedIndex) {
-        focusRequesters.getOrNull(selectedIndex)?.requestFocus()
-    }
-
-    Column(modifier.padding(start = 26.dp, end = 20.dp, top = 28.dp, bottom = 22.dp)) {
+    Column(
+        modifier.focusRequester(focusRequester).focusable()
+            .onPreviewKeyEvent { event ->
+                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                when (event.key) {
+                    Key.DirectionUp -> { onMoveFocus((focusedIndex - 1 + channels.size) % channels.size); true }
+                    Key.DirectionDown -> { onMoveFocus((focusedIndex + 1) % channels.size); true }
+                    Key.DirectionCenter, Key.Enter, Key.NumPadEnter -> { onSelect(focusedIndex); true }
+                    Key.DirectionLeft, Key.Escape, Key.Back -> { onClose(); true }
+                    else -> false
+                }
+            }
+            .padding(start = 26.dp, end = 20.dp, top = 28.dp, bottom = 22.dp)
+    ) {
         Text("频道列表", color = Color.White, fontSize = 27.sp)
         Text("中央电视台 · 官方网页入口", color = SecondaryText, fontSize = 14.sp)
         Spacer(Modifier.height(22.dp))
         LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             itemsIndexed(channels, key = { _, channel -> channel.id }) { index, channel ->
-                var focused by remember { mutableStateOf(false) }
+                val focused = focusedIndex == index
                 Surface(
-                    onClick = { onSelect(index) },
-                    color = when {
-                        focused -> Color(0xFF244875)
-                        selectedIndex == index -> Color(0xFF1A2B42)
-                        else -> Color.Transparent
-                    },
+                    color = when { focused -> Color(0xFF244875); selectedIndex == index -> Color(0xFF1A2B42); else -> Color.Transparent },
                     border = if (focused) BorderStroke(2.dp, Accent) else null,
                     shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(76.dp)
-                        .focusRequester(focusRequesters[index])
-                        .onFocusChanged {
-                            focused = it.isFocused
-                            if (it.isFocused) onFocused(index)
-                        }
+                    modifier = Modifier.fillMaxWidth().height(76.dp)
                 ) {
-                    Row(
-                        Modifier.fillMaxSize().padding(horizontal = 18.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
+                    Row(Modifier.fillMaxSize().padding(horizontal = 18.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
                         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text(channel.name, color = Color.White, fontSize = 19.sp)
                             Text("官方网页 · 待实机验证", color = SecondaryText, fontSize = 12.sp)
                         }
-                        if (selectedIndex == index) {
-                            Text("正在播放", color = Color(0xFF9CC7FF), fontSize = 12.sp)
-                        }
+                        if (selectedIndex == index) Text("正在播放", color = Color(0xFF9CC7FF), fontSize = 12.sp)
                     }
                 }
             }
