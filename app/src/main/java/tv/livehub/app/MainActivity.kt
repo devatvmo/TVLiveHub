@@ -116,8 +116,17 @@ private fun TvLiveScreen(channels: List<TvChannel>) {
 
     BackHandler(enabled = drawerOpen) { drawerOpen = false }
 
+    // Explicitly claim D-pad focus at startup; TV devices do not always assign Compose focus automatically.
+    LaunchedEffect(Unit) {
+        delay(120)
+        rootFocusRequester.requestFocus()
+    }
+
     LaunchedEffect(drawerOpen) {
-        if (!drawerOpen) rootFocusRequester.requestFocus()
+        if (!drawerOpen) {
+            delay(80)
+            rootFocusRequester.requestFocus()
+        }
     }
 
     LaunchedEffect(selectedChannel.id) {
