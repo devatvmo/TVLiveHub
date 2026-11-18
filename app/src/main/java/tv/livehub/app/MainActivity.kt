@@ -104,6 +104,7 @@ class MainActivity : ComponentActivity() {
 @Composable
 private fun TvLiveScreen(channels: List<TvChannel>) {
     var selectedIndex by remember { mutableIntStateOf(0) }
+    var page by remember { mutableStateOf("home") }
     var drawerOpen by remember { mutableStateOf(false) }
     var infoVisible by remember { mutableStateOf(true) }
     var reloadToken by remember { mutableIntStateOf(0) }
@@ -112,27 +113,45 @@ private fun TvLiveScreen(channels: List<TvChannel>) {
 
     val selectedChannel = channels[selectedIndex.coerceIn(channels.indices)]
     val rootFocusRequester = remember { FocusRequester() }
+    val homeFocusRequester = remember { FocusRequester() }
     val focusRequesters = remember(channels) { channels.map { FocusRequester() } }
 
-    BackHandler(enabled = drawerOpen) { drawerOpen = false }
-
-    // Explicitly claim D-pad focus at startup; TV devices do not always assign Compose focus automatically.
-    LaunchedEffect(Unit) {
-        delay(120)
-        rootFocusRequester.requestFocus()
-    }
-
-    LaunchedEffect(drawerOpen) {
-        if (!drawerOpen) {
-            delay(80)
-            rootFocusRequester.requestFocus()
+    BackHandler {
+        when {
+            drawerOpen -> drawerOpen = false
+            page == "live" -> page = "home"
+            else -> Unit
         }
     }
 
-    LaunchedEffect(selectedChannel.id) {
-        infoVisible = true
-        delay(3500)
-        infoVisible = false
+    LaunchedEffect(page, drawerOpen) {
+        delay(120)
+        if (page == "home") homeFocusRequester.requestFocus()
+        else if (!drawerOpen) rootFocusRequester.requestFocus()
+    }
+
+    LaunchedEffect(selectedChannel.id, page) {
+        if (page == "live") {
+            infoVisible = true
+            delay(3500)
+            infoVisible = false
+        }
+    }
+
+    if (page == "home") {
+        HomeScreen(
+            channels = channels,
+            selectedIndex = selectedIndex,
+            focusRequester = homeFocusRequester,
+            onOpenLive = {
+                selectedIndex = it
+                page = "live"
+                reloadToken++
+                firstFrame = false
+                playbackError = null
+            }
+        )
+        return
     }
 
     Box(
@@ -144,46 +163,36 @@ private fun TvLiveScreen(channels: List<TvChannel>) {
             .onPreviewKeyEvent { event ->
                 if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                 when (event.key) {
-                    Key.DirectionLeft -> {
-                        drawerOpen = !drawerOpen
+                    Key.DirectionLeft -> { drawerOpen = !drawerOpen; true }
+                    Key.DirectionUp -> if (drawerOpen) false else {
+                        selectedIndex = (selectedIndex - 1 + channels.size) % channels.size
+                        infoVisible = true
+                        reloadToken++
+                        firstFrame = false
+                        playbackError = null
                         true
                     }
-                    Key.DirectionUp -> {
-                        if (drawerOpen) false else {
-                            selectedIndex = (selectedIndex - 1 + channels.size) % channels.size
-                            infoVisible = true
-                            true
-                        }
+                    Key.DirectionDown -> if (drawerOpen) false else {
+                        selectedIndex = (selectedIndex + 1) % channels.size
+                        infoVisible = true
+                        reloadToken++
+                        firstFrame = false
+                        playbackError = null
+                        true
                     }
-                    Key.DirectionDown -> {
-                        if (drawerOpen) false else {
-                            selectedIndex = (selectedIndex + 1) % channels.size
-                            infoVisible = true
-                            true
-                        }
-                    }
-                    Key.DirectionCenter, Key.Enter, Key.NumPadEnter -> {
-                        if (drawerOpen) false else {
-                            infoVisible = !infoVisible
-                            true
-                        }
-                    }
+                    Key.DirectionCenter, Key.Enter, Key.NumPadEnter ->
+                        if (drawerOpen) false else { infoVisible = !infoVisible; true }
                     else -> false
                 }
             }
     ) {
-        key("${selectedChannel.id}-$reloadToken") {
+        key("\${selectedChannel.id}-\$reloadToken") {
             LivePlaybackSurface(
                 url = selectedChannel.officialPage,
                 playbackType = PlaybackType.OFFICIAL_WEBVIEW,
                 modifier = Modifier.fillMaxSize(),
-                onFirstFrame = {
-                    firstFrame = true
-                    playbackError = null
-                },
-                onError = { message ->
-                    playbackError = message
-                }
+                onFirstFrame = { firstFrame = true; playbackError = null },
+                onError = { message -> playbackError = message }
             )
         }
 
@@ -191,10 +200,7 @@ private fun TvLiveScreen(channels: List<TvChannel>) {
             WaitingOverlay(
                 channelName = selectedChannel.name,
                 error = playbackError,
-                onRetry = {
-                    reloadToken++
-                    playbackError = null
-                }
+                onRetry = { reloadToken++; playbackError = null }
             )
         }
 
@@ -208,10 +214,7 @@ private fun TvLiveScreen(channels: List<TvChannel>) {
 
         if (drawerOpen) {
             Row(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color(0x99000000))
-                    .zIndex(5f)
+                modifier = Modifier.fillMaxSize().background(Color(0x99000000)).zIndex(5f)
             ) {
                 ChannelDrawer(
                     channels = channels,
@@ -222,24 +225,89 @@ private fun TvLiveScreen(channels: List<TvChannel>) {
                         selectedIndex = it
                         drawerOpen = false
                         infoVisible = true
+                        reloadToken++
+                        firstFrame = false
+                        playbackError = null
                     },
-                    modifier = Modifier
-                        .width(430.dp)
-                        .fillMaxHeight()
-                        .background(Panel)
+                    modifier = Modifier.width(430.dp).fillMaxHeight().background(Panel)
                 )
                 Spacer(Modifier.weight(1f))
             }
         }
 
         Text(
-            text = "↑↓ 换台    ← 频道列表    OK 信息    返回 关闭列表",
+            text = "↑↓ 换台    ← 频道列表    OK 信息    返回 返回首页",
             color = Color(0x99FFFFFF),
             fontSize = 13.sp,
-            modifier = Modifier
-                .align(Alignment.BottomStart)
-                .padding(start = 30.dp, bottom = 22.dp)
+            modifier = Modifier.align(Alignment.BottomStart).padding(start = 30.dp, bottom = 22.dp)
         )
+    }
+}
+
+@Composable
+private fun HomeScreen(
+    channels: List<TvChannel>,
+    selectedIndex: Int,
+    focusRequester: FocusRequester,
+    onOpenLive: (Int) -> Unit
+) {
+    var focusedIndex by remember { mutableIntStateOf(0) }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Background)
+            .focusRequester(focusRequester)
+            .focusable()
+            .onPreviewKeyEvent { event ->
+                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                when (event.key) {
+                    Key.DirectionLeft -> { focusedIndex = (focusedIndex - 1 + channels.size) % channels.size; true }
+                    Key.DirectionRight -> { focusedIndex = (focusedIndex + 1) % channels.size; true }
+                    Key.DirectionUp -> { focusedIndex = 0; true }
+                    Key.DirectionDown -> { focusedIndex = minOf(1, channels.lastIndex); true }
+                    Key.DirectionCenter, Key.Enter, Key.NumPadEnter -> {
+                        onOpenLive(focusedIndex.coerceIn(channels.indices))
+                        true
+                    }
+                    else -> false
+                }
+            }
+    ) {
+        Column(
+            modifier = Modifier.fillMaxSize().padding(horizontal = 64.dp, vertical = 46.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                Text("TVLive", color = Color.White, fontSize = 34.sp)
+                Text("官方直播", color = Accent, fontSize = 18.sp)
+            }
+            Spacer(Modifier.height(42.dp))
+            Text("电视直播", color = Color.White, fontSize = 28.sp)
+            Text("选择频道开始观看", color = SecondaryText, fontSize = 15.sp, modifier = Modifier.padding(top = 6.dp))
+            Spacer(Modifier.height(26.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+                channels.forEachIndexed { index, channel ->
+                    val focused = focusedIndex == index
+                    Surface(
+                        onClick = { onOpenLive(index) },
+                        color = if (focused) Color(0xFF244875) else Panel,
+                        border = if (focused) BorderStroke(2.dp, Accent) else null,
+                        shape = RoundedCornerShape(16.dp),
+                        modifier = Modifier.width(300.dp).height(170.dp)
+                    ) {
+                        Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.SpaceBetween) {
+                            Text(if (index == selectedIndex) "继续观看" else "频道", color = if (focused) Color.White else SecondaryText, fontSize = 14.sp)
+                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Text(channel.name, color = Color.White, fontSize = 25.sp)
+                                Text(channel.group, color = SecondaryText, fontSize = 13.sp)
+                            }
+                        }
+                    }
+                }
+            }
+            Spacer(Modifier.weight(1f))
+            Text("← → 选择频道    确定进入直播    返回退出", color = Color(0x99FFFFFF), fontSize = 13.sp)
+        }
     }
 }
 
