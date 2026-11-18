@@ -107,7 +107,7 @@ private fun Media3Surface(
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.MATCH_PARENT
                 )
-                player = this@apply.let { player }
+                this.player = player
             }
         },
         update = { it.player = player }
@@ -292,7 +292,7 @@ private const val FIRST_FRAME_PROBE = """
   function scan() {
     var videos = document.querySelectorAll('video');
     videos.forEach(function (video) {
-      video.muted = true;
+      if (!reported) video.muted = true;
       if (video.readyState >= 2 && video.videoWidth > 0 && video.videoHeight > 0) {
         if (video.requestVideoFrameCallback) {
           video.requestVideoFrameCallback(function () { report(video); });
@@ -304,7 +304,7 @@ private const val FIRST_FRAME_PROBE = """
     });
   }
   document.addEventListener('play', function (event) {
-    if (event.target && event.target.tagName === 'VIDEO') event.target.muted = true;
+    if (!reported && event.target && event.target.tagName === 'VIDEO') event.target.muted = true;
     scan();
   }, true);
   scan();
