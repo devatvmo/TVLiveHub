@@ -205,6 +205,7 @@ private fun OfficialWebViewSurface(
                 override fun onPageFinished(view: WebView, pageUrl: String?) {
                     loading = false
                     view.evaluateJavascript(FIRST_FRAME_PROBE, null)
+                    if (pageUrl?.contains("cctv.com", ignoreCase = true) == true) view.evaluateJavascript(CCTV_FULLSCREEN_LAYOUT, null)
                 }
 
                 override fun onReceivedError(
@@ -313,6 +314,50 @@ private fun UnsupportedSurface(modifier: Modifier, message: String) {
         Text(message, color = Color.White)
     }
 }
+
+private const val CCTV_FULLSCREEN_LAYOUT = """
+(function(){
+ if(window.__tvLiveFsInstalled)return; window.__tvLiveFsInstalled=true;
+ var sid='tvlive-fs-style', timer;
+ function apply(){
+  try{
+   var list=[].slice.call(document.querySelectorAll('video,iframe,embed,object')).filter(function(e){
+    var r=e.getBoundingClientRect(),c=getComputedStyle(e);
+    return r.width>120&&r.height>70&&c.display!=='none'&&c.visibility!=='hidden';
+   });
+   if(!list.length)return;
+   list.sort(function(a,b){
+    function score(e){var r=e.getBoundingClientRect(),s=((e.src||'')+' '+(e.id||' ')+' '+(e.className||' ')).toString().toLowerCase();return r.width*r.height*(/player|live|video|play/.test(s)?2:1);}
+    return score(b)-score(a);
+   });
+   var media=list[0],target=media.tagName==='VIDEO'?(media.parentElement||media):media;
+   if(!document.getElementById(sid)){
+    var st=document.createElement('style');st.id=sid;
+    st.textContent='html,body{margin:0!important;padding:0!important;width:100%!important;height:100%!important;overflow:hidden!important;background:#000!important}'+
+    '[data-tvlive-fs="1"]{position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;max-width:none!important;max-height:none!important;margin:0!important;padding:0!important;transform:none!important;z-index:2147483647!important;overflow:hidden!important;background:#000!important}'+
+    '[data-tvlive-fs="1"] video,[data-tvlive-fs="1"] iframe,[data-tvlive-fs="1"] embed,[data-tvlive-fs="1"] object{width:100%!important;height:100%!important;max-width:none!important;max-height:none!important;object-fit:contain!important}';
+    (document.head||document.documentElement).appendChild(st);
+   }
+   document.querySelectorAll('[data-tvlive-fs="1"]').forEach(function(e){e.removeAttribute('data-tvlive-fs');});
+   var n=target;
+   while(n&&n!==document.body&&n!==document.documentElement){
+    n.setAttribute('data-tvlive-fs','1');
+    var p=n.parentElement;
+    if(p)[].slice.call(p.children).forEach(function(x){if(x!==n)x.style.setProperty('display','none','important');});
+    n=p;
+   }
+  }catch(e){}
+ }
+ apply();timer=setInterval(apply,1000);
+ window.__tvLiveStopFullscreenLayout=function(){
+  clearInterval(timer);
+  document.querySelectorAll('[data-tvlive-fs="1"]').forEach(function(e){e.removeAttribute('data-tvlive-fs');});
+  document.querySelectorAll('*').forEach(function(e){if(e.style&&e.style.display==='none')e.style.removeProperty('display');});
+  var st=document.getElementById(sid);if(st)st.remove();
+  window.__tvLiveFsInstalled=false;
+ };
+})();
+"""
 
 private const val FIRST_FRAME_PROBE = """
 (function () {
