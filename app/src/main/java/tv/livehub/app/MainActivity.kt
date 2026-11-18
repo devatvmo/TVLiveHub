@@ -67,8 +67,15 @@ class MainActivity : ComponentActivity() {
     private val remoteController = LiveRemoteController()
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        // Intercept D-pad before WebView or its fullscreen custom view can consume it.
         if (event.action == KeyEvent.ACTION_DOWN && remoteController.dispatch(event.keyCode)) return true
         return super.dispatchKeyEvent(event)
+    }
+
+    // Fallback for TV remotes whose key events reach Activity.onKeyDown after decor dispatch.
+    override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
+        if (remoteController.dispatch(keyCode)) return true
+        return super.onKeyDown(keyCode, event)
     }
     @Suppress("DEPRECATION")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -130,7 +137,9 @@ private fun TvLiveScreen(channels: List<TvChannel>, remoteController: LiveRemote
         }
     }
 
-    DisposableEffect(page, drawerOpen, selectedIndex) {
+    // Keep the Activity-level key dispatcher registered continuously.
+    // SideEffect refreshes the lambda after state changes without a null-listener gap.
+    SideEffect {
         remoteController.onKey = { code ->
             when (code) {
                 KeyEvent.KEYCODE_DPAD_LEFT -> if (page == "live") {
@@ -167,6 +176,8 @@ private fun TvLiveScreen(channels: List<TvChannel>, remoteController: LiveRemote
                 else -> false
             }
         }
+    }
+    DisposableEffect(remoteController) {
         onDispose { remoteController.onKey = null }
     }
 
