@@ -1,3 +1,12 @@
+## [0.3.0-alpha.9] - 2026-11-18
+### Fixed
+- Activity 级遥控器回调改为持续注册，避免页面状态变化时 DisposableEffect 销毁/重建监听器造成按键事件丢失。
+- 增加 Activity.onKeyDown 兜底分发，兼容部分电视遥控器的按键回调路径。
+- 频道列表和直播换台仍统一走同一套状态控制，不依赖 WebView 焦点。
+### Validation
+- 必须在模拟器和目标电视盒子分别验证直播 ↑↓、频道列表 ↑↓、OK 选择。
+- Alpha 测试版，未标记稳定。
+
 ## [0.3.0-alpha.8] - 2026-11-18
 ### Changed
 - 重构直播页遥控器输入：由 Activity.dispatchKeyEvent 统一接管标准十字键，避免 WebView 抢占 D-pad。
