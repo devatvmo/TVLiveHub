@@ -146,6 +146,7 @@ private fun OfficialWebViewSurface(
 
     val webView = remember(url) {
         WebView(context).apply {
+            val pageWebView = this
             isFocusable = false
             isFocusableInTouchMode = false
             settings.javaScriptEnabled = true
@@ -168,7 +169,7 @@ private fun OfficialWebViewSurface(
                         host.removeView(old)
                         customFullscreenCallback.value?.onCustomViewHidden()
                     }
-                    webView.visibility = View.INVISIBLE
+                    pageWebView.visibility = View.INVISIBLE
                     customFullscreenView.value = view
                     customFullscreenCallback.value = callback
                     host.addView(view, FrameLayout.LayoutParams(
@@ -183,7 +184,7 @@ private fun OfficialWebViewSurface(
                     customFullscreenView.value = null
                     customFullscreenCallback.value?.onCustomViewHidden()
                     customFullscreenCallback.value = null
-                    webView.visibility = View.VISIBLE
+                    pageWebView.visibility = View.VISIBLE
                 }
             }
 
