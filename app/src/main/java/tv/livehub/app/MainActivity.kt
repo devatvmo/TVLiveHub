@@ -160,37 +160,6 @@ private fun TvLiveScreen(channels: List<TvChannel>) {
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Black)
-            .focusRequester(rootFocusRequester)
-            .focusable()
-            .onPreviewKeyEvent { event ->
-                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-                when (event.key) {
-                    Key.DirectionLeft -> {
-                        drawerFocusedIndex = selectedIndex
-                        drawerOpen = !drawerOpen
-                        true
-                    }
-                    Key.DirectionUp -> if (drawerOpen) false else {
-                        selectedIndex = (selectedIndex - 1 + channels.size) % channels.size
-                        infoVisible = true
-                        reloadToken++
-                        firstFrame = false
-                        playbackError = null
-                        true
-                    }
-                    Key.DirectionDown -> if (drawerOpen) false else {
-                        selectedIndex = (selectedIndex + 1) % channels.size
-                        infoVisible = true
-                        reloadToken++
-                        firstFrame = false
-                        playbackError = null
-                        true
-                    }
-                    Key.DirectionCenter, Key.Enter, Key.NumPadEnter ->
-                        if (drawerOpen) false else { infoVisible = !infoVisible; true }
-                    else -> false
-                }
-            }
     ) {
         key("\${selectedChannel.id}-\$reloadToken") {
             LivePlaybackSurface(
@@ -201,6 +170,47 @@ private fun TvLiveScreen(channels: List<TvChannel>) {
                 onError = { message -> playbackError = message }
             )
         }
+
+        // WebView is a native Android view and may consume hardware keys before Compose.
+        // This transparent layer keeps D-pad navigation in the TV UI.
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .zIndex(4f)
+                .focusRequester(rootFocusRequester)
+                .focusable()
+                .onPreviewKeyEvent { event ->
+                    if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                    when (event.key) {
+                        Key.DirectionLeft -> {
+                            drawerFocusedIndex = selectedIndex
+                            drawerOpen = true
+                            true
+                        }
+                        Key.DirectionUp -> {
+                            selectedIndex = (selectedIndex - 1 + channels.size) % channels.size
+                            infoVisible = true
+                            reloadToken++
+                            firstFrame = false
+                            playbackError = null
+                            true
+                        }
+                        Key.DirectionDown -> {
+                            selectedIndex = (selectedIndex + 1) % channels.size
+                            infoVisible = true
+                            reloadToken++
+                            firstFrame = false
+                            playbackError = null
+                            true
+                        }
+                        Key.DirectionCenter, Key.Enter, Key.NumPadEnter -> {
+                            infoVisible = !infoVisible
+                            true
+                        }
+                        else -> false
+                    }
+                }
+        )
 
         if (!firstFrame) {
             WaitingOverlay(
