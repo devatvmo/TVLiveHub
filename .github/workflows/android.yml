@@ -2,7 +2,7 @@ name: Android build
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, "feature/**" ]
   pull_request:
     branches: [ main ]
   workflow_dispatch:
@@ -31,6 +31,6 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: TVLiveHub-0.2.0-debug
+          name: TVLive-0.3.0-alpha.1-debug
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
