@@ -141,8 +141,8 @@ private fun OfficialWebViewSurface(
 
     val webView = remember(url) {
         WebView(context).apply {
-            isFocusable = true
-            isFocusableInTouchMode = true
+            isFocusable = false
+            isFocusableInTouchMode = false
             settings.javaScriptEnabled = true
             settings.domStorageEnabled = true
             settings.mediaPlaybackRequiresUserGesture = false
@@ -240,7 +240,6 @@ private fun OfficialWebViewSurface(
                             FrameLayout.LayoutParams.MATCH_PARENT
                         )
                     )
-                    webView.requestFocus()
                 }
             },
             update = { container ->
