@@ -10,8 +10,8 @@ android {
         applicationId = "tv.livehub.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 9
-        versionName = "0.3.0-alpha.6"
+        versionCode = 11
+        versionName = "0.3.0-alpha.9"
     }
     buildFeatures { compose = true }
     compileOptions {
