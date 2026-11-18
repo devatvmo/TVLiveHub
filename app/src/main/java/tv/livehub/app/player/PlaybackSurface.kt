@@ -3,12 +3,14 @@ package tv.livehub.app.player
 import android.net.http.SslError
 import android.os.Handler
 import android.os.Looper
+import android.view.View
 import android.view.ViewGroup
 import android.webkit.JavascriptInterface
 import android.webkit.SslErrorHandler
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.webkit.WebChromeClient
 import android.widget.FrameLayout
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -135,6 +137,9 @@ private fun OfficialWebViewSurface(
     val errorCallback by rememberUpdatedState(onError)
     var loading by remember(url) { mutableStateOf(true) }
     var pageError by remember(url) { mutableStateOf(false) }
+    val fullscreenHost = remember(url) { mutableStateOf<FrameLayout?>(null) }
+    val customFullscreenView = remember(url) { mutableStateOf<View?>(null) }
+    val customFullscreenCallback = remember(url) { mutableStateOf<WebChromeClient.CustomViewCallback?>(null) }
     val allowedHosts = remember {
         listOf("cctv.com", "cntv.cn", "yangshipin.cn", "nmtv.cn", "cztv.com", "btv.com.cn")
     }
@@ -151,6 +156,36 @@ private fun OfficialWebViewSurface(
             settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_NEVER_ALLOW
             settings.safeBrowsingEnabled = true
             addJavascriptInterface(FirstFrameBridge { frameCallback() }, "TVLiveBridge")
+
+            webChromeClient = object : WebChromeClient() {
+                override fun onShowCustomView(view: View, callback: CustomViewCallback) {
+                    val host = fullscreenHost.value
+                    if (host == null) {
+                        callback.onCustomViewHidden()
+                        return
+                    }
+                    customFullscreenView.value?.let { old ->
+                        host.removeView(old)
+                        customFullscreenCallback.value?.onCustomViewHidden()
+                    }
+                    webView.visibility = View.INVISIBLE
+                    customFullscreenView.value = view
+                    customFullscreenCallback.value = callback
+                    host.addView(view, FrameLayout.LayoutParams(
+                        FrameLayout.LayoutParams.MATCH_PARENT,
+                        FrameLayout.LayoutParams.MATCH_PARENT
+                    ))
+                    view.bringToFront()
+                }
+
+                override fun onHideCustomView() {
+                    customFullscreenView.value?.let { fullscreenHost.value?.removeView(it) }
+                    customFullscreenView.value = null
+                    customFullscreenCallback.value?.onCustomViewHidden()
+                    customFullscreenCallback.value = null
+                    webView.visibility = View.VISIBLE
+                }
+            }
 
             webViewClient = object : WebViewClient() {
                 override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
@@ -214,6 +249,11 @@ private fun OfficialWebViewSurface(
     DisposableEffect(webView) {
         onDispose {
             runCatching {
+                customFullscreenView.value?.let { fullscreenHost.value?.removeView(it) }
+                customFullscreenCallback.value?.onCustomViewHidden()
+                customFullscreenView.value = null
+                customFullscreenCallback.value = null
+                webView.webChromeClient = null
                 webView.evaluateJavascript(
                     "document.querySelectorAll('video').forEach(v => { v.pause(); v.muted = true; });",
                     null
@@ -233,6 +273,7 @@ private fun OfficialWebViewSurface(
             modifier = Modifier.fillMaxSize(),
             factory = { viewContext ->
                 FrameLayout(viewContext).apply {
+                    fullscreenHost.value = this
                     addView(
                         webView,
                         FrameLayout.LayoutParams(
@@ -243,6 +284,7 @@ private fun OfficialWebViewSurface(
                 }
             },
             update = { container ->
+                fullscreenHost.value = container
                 if (webView.parent !== container) {
                     (webView.parent as? android.view.ViewGroup)?.removeView(webView)
                     container.addView(
