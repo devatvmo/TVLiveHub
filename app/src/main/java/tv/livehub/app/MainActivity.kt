@@ -111,9 +111,14 @@ private fun TvLiveScreen(channels: List<TvChannel>) {
     var playbackError by remember(selectedIndex, reloadToken) { mutableStateOf<String?>(null) }
 
     val selectedChannel = channels[selectedIndex.coerceIn(channels.indices)]
+    val rootFocusRequester = remember { FocusRequester() }
     val focusRequesters = remember(channels) { channels.map { FocusRequester() } }
 
     BackHandler(enabled = drawerOpen) { drawerOpen = false }
+
+    LaunchedEffect(drawerOpen) {
+        if (!drawerOpen) rootFocusRequester.requestFocus()
+    }
 
     LaunchedEffect(selectedChannel.id) {
         infoVisible = true
@@ -125,6 +130,8 @@ private fun TvLiveScreen(channels: List<TvChannel>) {
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Black)
+            .focusRequester(rootFocusRequester)
+            .focusable()
             .onPreviewKeyEvent { event ->
                 if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                 when (event.key) {
