@@ -170,7 +170,7 @@ private fun TvLiveScreen(channels: List<TvChannel>, remoteController: LiveRemote
         onDispose { remoteController.onKey = null }
     }
 
-    LaunchedEffect(page, drawerOpen)    LaunchedEffect(selectedChannel.id, page) {
+    LaunchedEffect(selectedChannel.id, page) {
         if (page == "live") {
             infoVisible = true
             delay(3500)
@@ -398,7 +398,7 @@ private fun ChannelDrawer(
     modifier: Modifier = Modifier
 ) {
     Column(
-        modifier.padding.padding(start = 26.dp, end = 20.dp, top = 28.dp, bottom = 22.dp)
+        modifier.padding(start = 26.dp, end = 20.dp, top = 28.dp, bottom = 22.dp)
     ) {
         Text("频道列表", color = Color.White, fontSize = 27.sp)
         Text("中央电视台 · 官方网页入口", color = SecondaryText, fontSize = 14.sp)
