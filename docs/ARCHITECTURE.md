@@ -1,24 +1,41 @@
-# 技术架构
+# 技术架构（TVLive）
 
-## Android TV 播放端
-- UI：Kotlin + Jetpack Compose，按电视大屏与 D-pad 焦点设计。
-- 播放：Media3 ExoPlayer 用于平台允许直接播放的媒体；WebView 用于官方网页播放器。
-- Data：Channel 与 ChannelSource 一对多；每个来源独立记录 provider、播放类型、免费状态、优先级、质量、验证时间和错误。
-- Policy：仅 FREE_VERIFIED 且 enabled 的来源可被播放调度器选择。
-- Player lifecycle：切台前停止并释放前一播放会话；任何时刻只允许一个活动音视频会话。
-- Fallback：仅对网络/播放器类故障尝试下一个已验证来源；会员/登录/地区限制不触发规避行为。
+## 平台基线
+- Kotlin。
+- Android TV / Android TV Box。
+- minSdk 26，compileSdk 35，targetSdk 34。
+- Jetpack Compose + Material 3。
+- 横屏、沉浸式全屏。
+- JDK 17 / Gradle 8.9 / Android Gradle Plugin 8.7.3。
 
-## 局域网网页管理端（0.2.0）
-- 手机/电脑浏览器负责配置，电视端负责播放。
-- Android 内嵌 NanoHTTPD，仅提供频道和来源配置 API；不代理、下载或转发视频流。
-- 管理页面作为 APK assets 内静态 HTML 提供。
-- 频道与来源配置保存在电视本机 SharedPreferences。
-- 配对码在应用运行期间显示，配对成功后使用 Bearer token 访问管理 API。
-- 管理服务绑定 0.0.0.0:8765；仅在 TVLive Hub Activity 生命周期内运行，退出时停止。
-- 新来源默认 PENDING，不能因用户添加就视为免费或已验证。
+## 播放架构
+- Media3 ExoPlayer：用于官方明确允许直接播放的 HLS / DASH 媒体地址。
+- Android WebView：用于官方允许嵌入的 HTTPS 直播网页。
+- 任意时刻只允许一个活动播放会话。
+- Media3 首帧前 volume=0，收到 onRenderedFirstFrame 后恢复音量。
+- 切台时旧播放器静音、stop、release；旧 WebView 暂停媒体、停止加载、导航 about:blank 并 destroy。
+- 页面首帧探测不可用时，不得仅因 onPageFinished 就隐藏占位层。
+- WebView 内嵌跨域 iframe、DRM 或受保护播放器可能无法被宿主准确探测，需标记为兼容性限制。
 
-## 后续
-- 来源可达性与实际播放测试。
-- 将通过验证的本机配置映射为播放端频道列表。
-- 自动选源与故障切换。
-- 频道分组、收藏、节目单、配置导入导出。
+## UI 与遥控器
+- Compose 单屏直播界面。
+- 上/下：换台。
+- 左：呼出/关闭频道抽屉。
+- 抽屉内上/下移动焦点，确定播放，返回关闭。
+- 不实现飞鼠、鼠标悬停或触屏专用交互。
+
+## 数据与资源
+- 官方频道目录与播放地址分离。
+- 每个频道记录 broadcaster、officialPage、playbackType、验证状态与最后验证时间。
+- 未验证来源不标记为可播放。
+- 首批 CCTV-1、CCTV-13 页面仅为待实机验证的官方网页入口。
+- 北京、内蒙古、浙江广电入口逐个核验后再加入。
+
+## 合规与安全
+- 仅 HTTPS 官方页面。
+- WebView 禁止文件访问、混合内容及 SSL 错误继续加载。
+- 不绕过登录、会员、地区限制或 DRM。
+- 不代理、下载或转发视频流。
+
+## 构建
+GitHub Actions 使用 JDK 17 和 Gradle 8.9 执行 :app:assembleDebug，并上传 APK 构建产物。

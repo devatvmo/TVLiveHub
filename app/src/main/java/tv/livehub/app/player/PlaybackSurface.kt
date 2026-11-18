@@ -1,96 +1,148 @@
 package tv.livehub.app.player
 
 import android.net.http.SslError
-import android.view.View
+import android.os.Handler
+import android.os.Looper
 import android.view.ViewGroup
+import android.webkit.JavascriptInterface
 import android.webkit.SslErrorHandler
-import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.FrameLayout
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.MediaItem
+import androidx.media3.common.PlaybackException
+import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
-import tv.livehub.app.model.ChannelSource
 import tv.livehub.app.model.PlaybackType
 
-/** Direct media playback must be gated by the caller's FREE_VERIFIED policy. */
-@Composable
-fun PlaybackSurface(source: ChannelSource, modifier: Modifier = Modifier) {
-    when (source.playbackType) {
-        PlaybackType.MEDIA3_HLS, PlaybackType.MEDIA3_DASH -> Media3PlaybackSurface(source.playbackUrl, modifier)
-        PlaybackType.OFFICIAL_WEBVIEW -> OfficialWebViewPlayer(source.playbackUrl, modifier)
-        PlaybackType.OFFICIAL_APP -> Unit
-    }
-}
-
-@Composable
-private fun Media3PlaybackSurface(url: String, modifier: Modifier) {
-    val context = LocalContext.current
-    val player = remember(url) {
-        ExoPlayer.Builder(context).build().apply {
-            setMediaItem(MediaItem.fromUri(url))
-            prepare()
-            playWhenReady = true
-        }
-    }
-    DisposableEffect(player) {
-        onDispose { player.stop(); player.release() }
-    }
-    AndroidView(modifier = modifier, factory = { ctx ->
-        PlayerView(ctx).apply {
-            layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
-            useController = true
-            this.player = player
-        }
-    }, update = { it.player = player })
-}
-
 /**
- * Opens an official broadcaster page inside the app. This is a page-playback test,
- * not proof that the channel is free or available in every territory/account state.
+ * A single active playback surface is mounted by the TV screen.
+ * The caller keys this composable by channel ID so the previous engine is disposed
+ * before the next channel is mounted.
  */
 @Composable
-fun OfficialWebViewPlayer(url: String, modifier: Modifier = Modifier) {
-    val context = LocalContext.current
-    val loading = remember(url) { mutableStateOf(true) }
-    val pageError = remember(url) { mutableStateOf(false) }
-    val fullScreen = remember(url) { mutableStateOf(false) }
-    val containerRef = remember(url) { arrayOfNulls<FrameLayout>(1) }
-    val customViewRef = remember(url) { arrayOfNulls<View>(1) }
-    val customCallbackRef = remember(url) { arrayOfNulls<WebChromeClient.CustomViewCallback>(1) }
+fun LivePlaybackSurface(
+    url: String,
+    playbackType: PlaybackType,
+    modifier: Modifier = Modifier,
+    onFirstFrame: () -> Unit,
+    onError: (String) -> Unit
+) {
+    when (playbackType) {
+        PlaybackType.MEDIA3_HLS, PlaybackType.MEDIA3_DASH ->
+            Media3Surface(url, modifier, onFirstFrame, onError)
+        PlaybackType.OFFICIAL_WEBVIEW ->
+            OfficialWebViewSurface(url, modifier, onFirstFrame, onError)
+        PlaybackType.OFFICIAL_APP ->
+            UnsupportedSurface(modifier, "该官方内容需要通过官方应用播放")
+    }
+}
 
-    fun leaveFullScreen() {
-        val container = containerRef[0]
-        customViewRef[0]?.let { container?.removeView(it) }
-        customViewRef[0] = null
-        customCallbackRef[0]?.onCustomViewHidden()
-        customCallbackRef[0] = null
-        fullScreen.value = false
+@Composable
+private fun Media3Surface(
+    url: String,
+    modifier: Modifier,
+    onFirstFrame: () -> Unit,
+    onError: (String) -> Unit
+) {
+    val context = LocalContext.current
+    val firstFrameCallback by rememberUpdatedState(onFirstFrame)
+    val errorCallback by rememberUpdatedState(onError)
+    val player = remember(url) {
+        ExoPlayer.Builder(context).build().apply {
+            volume = 0f
+            setMediaItem(MediaItem.fromUri(url))
+        }
+    }
+
+    DisposableEffect(player) {
+        val listener = object : Player.Listener {
+            override fun onRenderedFirstFrame() {
+                player.volume = 1f
+                firstFrameCallback()
+            }
+
+            override fun onPlayerError(error: PlaybackException) {
+                player.volume = 0f
+                errorCallback("直播播放失败：${error.errorCodeName}")
+            }
+        }
+        player.addListener(listener)
+        player.playWhenReady = true
+        player.prepare()
+        onDispose {
+            player.volume = 0f
+            player.removeListener(listener)
+            player.stop()
+            player.release()
+        }
+    }
+
+    AndroidView(
+        modifier = modifier.background(Color.Black),
+        factory = { viewContext ->
+            PlayerView(viewContext).apply {
+                useController = false
+                setShowBuffering(PlayerView.SHOW_BUFFERING_NEVER)
+                layoutParams = ViewGroup.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT
+                )
+                this.player = player
+            }
+        },
+        update = { it.player = player }
+    )
+}
+
+private class FirstFrameBridge(
+    private val callback: () -> Unit
+) {
+    @JavascriptInterface
+    fun onFirstFrame() {
+        Handler(Looper.getMainLooper()).post { callback() }
+    }
+}
+
+@Composable
+private fun OfficialWebViewSurface(
+    url: String,
+    modifier: Modifier,
+    onFirstFrame: () -> Unit,
+    onError: (String) -> Unit
+) {
+    val context = LocalContext.current
+    val frameCallback by rememberUpdatedState(onFirstFrame)
+    val errorCallback by rememberUpdatedState(onError)
+    var loading by remember(url) { mutableStateOf(true) }
+    var pageError by remember(url) { mutableStateOf(false) }
+    val allowedHosts = remember {
+        listOf("cctv.com", "cntv.cn", "yangshipin.cn", "nmtv.cn", "cztv.com", "btv.com.cn")
     }
 
     val webView = remember(url) {
         WebView(context).apply {
-            val targetWebView = this
-            isFocusable = true
-            isFocusableInTouchMode = true
+            isFocusable = false
+            isFocusableInTouchMode = false
             settings.javaScriptEnabled = true
             settings.domStorageEnabled = true
             settings.mediaPlaybackRequiresUserGesture = false
@@ -98,24 +150,25 @@ fun OfficialWebViewPlayer(url: String, modifier: Modifier = Modifier) {
             settings.allowContentAccess = false
             settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_NEVER_ALLOW
             settings.safeBrowsingEnabled = true
+            addJavascriptInterface(FirstFrameBridge { frameCallback() }, "TVLiveBridge")
 
             webViewClient = object : WebViewClient() {
                 override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
                     if (!request.isForMainFrame) return false
                     val uri = request.url
                     val host = uri.host?.lowercase().orEmpty()
-                    val officialHost = host == "cctv.com" || host.endsWith(".cctv.com") ||
-                        host == "cntv.cn" || host.endsWith(".cntv.cn")
+                    val officialHost = allowedHosts.any { host == it || host.endsWith(".$it") }
                     return uri.scheme != "https" || !officialHost
                 }
 
                 override fun onPageStarted(view: WebView, pageUrl: String?, favicon: android.graphics.Bitmap?) {
-                    loading.value = true
-                    pageError.value = false
+                    loading = true
+                    pageError = false
                 }
 
                 override fun onPageFinished(view: WebView, pageUrl: String?) {
-                    loading.value = false
+                    loading = false
+                    view.evaluateJavascript(FIRST_FRAME_PROBE, null)
                 }
 
                 override fun onReceivedError(
@@ -124,8 +177,9 @@ fun OfficialWebViewPlayer(url: String, modifier: Modifier = Modifier) {
                     error: android.webkit.WebResourceError
                 ) {
                     if (request.isForMainFrame) {
-                        loading.value = false
-                        pageError.value = true
+                        loading = false
+                        pageError = true
+                        errorCallback("官方直播页面加载失败，请检查网络后重试")
                     }
                 }
 
@@ -135,96 +189,124 @@ fun OfficialWebViewPlayer(url: String, modifier: Modifier = Modifier) {
                     errorResponse: android.webkit.WebResourceResponse
                 ) {
                     if (request.isForMainFrame && errorResponse.statusCode >= 400) {
-                        loading.value = false
-                        pageError.value = true
+                        loading = false
+                        pageError = true
+                        errorCallback("官方页面返回 HTTP ${errorResponse.statusCode}")
                     }
                 }
 
-                override fun onReceivedSslError(view: WebView, handler: SslErrorHandler, error: SslError) {
+                override fun onReceivedSslError(
+                    view: WebView,
+                    handler: SslErrorHandler,
+                    error: SslError
+                ) {
                     handler.cancel()
-                    loading.value = false
-                    pageError.value = true
+                    loading = false
+                    pageError = true
+                    errorCallback("官方页面 HTTPS 证书校验失败")
                 }
             }
-            webChromeClient = object : WebChromeClient() {
-                override fun onProgressChanged(view: WebView, newProgress: Int) {
-                    if (newProgress >= 100) loading.value = false
-                }
 
-                override fun onShowCustomView(view: View, callback: CustomViewCallback) {
-                    val container = containerRef[0]
-                    if (container == null) {
-                        callback.onCustomViewHidden()
-                        return
-                    }
-                    customViewRef[0]?.let { container.removeView(it) }
-                    (view.parent as? ViewGroup)?.removeView(view)
-                    customViewRef[0] = view
-                    customCallbackRef[0] = callback
-                    targetWebView.visibility = View.GONE
-                    container.addView(view, FrameLayout.LayoutParams(
-                        FrameLayout.LayoutParams.MATCH_PARENT,
-                        FrameLayout.LayoutParams.MATCH_PARENT
-                    ))
-                    fullScreen.value = true
-                }
-
-                override fun onHideCustomView() {
-                    leaveFullScreen()
-                    targetWebView.visibility = View.VISIBLE
-                }
-            }
             loadUrl(url)
         }
     }
 
-    BackHandler(enabled = fullScreen.value) {
-        webView.visibility = View.VISIBLE
-        leaveFullScreen()
-    }
-
     DisposableEffect(webView) {
         onDispose {
-            customViewRef[0]?.let { containerRef[0]?.removeView(it) }
-            customCallbackRef[0]?.onCustomViewHidden()
-            webView.stopLoading()
-            webView.loadUrl("about:blank")
-            webView.removeAllViews()
-            webView.destroy()
+            runCatching {
+                webView.evaluateJavascript(
+                    "document.querySelectorAll('video').forEach(v => { v.pause(); v.muted = true; });",
+                    null
+                )
+                webView.onPause()
+                webView.stopLoading()
+                webView.loadUrl("about:blank")
+                webView.removeJavascriptInterface("TVLiveBridge")
+                webView.removeAllViews()
+                webView.destroy()
+            }
         }
     }
 
     Box(modifier = modifier.background(Color.Black), contentAlignment = Alignment.Center) {
         AndroidView(
             modifier = Modifier.fillMaxSize(),
-            factory = { ctx ->
-                FrameLayout(ctx).apply {
-                    containerRef[0] = this
-                    addView(webView, FrameLayout.LayoutParams(
-                        FrameLayout.LayoutParams.MATCH_PARENT,
-                        FrameLayout.LayoutParams.MATCH_PARENT
-                    ))
-                    webView.requestFocus()
+            factory = { viewContext ->
+                FrameLayout(viewContext).apply {
+                    addView(
+                        webView,
+                        FrameLayout.LayoutParams(
+                            FrameLayout.LayoutParams.MATCH_PARENT,
+                            FrameLayout.LayoutParams.MATCH_PARENT
+                        )
+                    )
                 }
             },
             update = { container ->
-                containerRef[0] = container
-                if (customViewRef[0] == null && webView.parent !== container) {
-                    (webView.parent as? ViewGroup)?.removeView(webView)
-                    container.addView(webView)
-                    webView.visibility = View.VISIBLE
+                if (webView.parent !== container) {
+                    (webView.parent as? android.view.ViewGroup)?.removeView(webView)
+                    container.addView(
+                        webView,
+                        FrameLayout.LayoutParams(
+                            FrameLayout.LayoutParams.MATCH_PARENT,
+                            FrameLayout.LayoutParams.MATCH_PARENT
+                        )
+                    )
                 }
             }
         )
-        if (loading.value && !fullScreen.value) {
+        if (loading && !pageError) {
             CircularProgressIndicator()
         }
-        if (pageError.value && !fullScreen.value) {
-            Text(
-                "央视网页面加载失败，请检查网络或稍后重试",
-                color = Color.White,
-                style = MaterialTheme.typography.titleMedium
-            )
+        if (pageError) {
+            Text("直播页面暂不可用", color = Color.White)
         }
     }
 }
+
+@Composable
+private fun UnsupportedSurface(modifier: Modifier, message: String) {
+    Box(modifier.background(Color.Black), contentAlignment = Alignment.Center) {
+        Text(message, color = Color.White)
+    }
+}
+
+private const val FIRST_FRAME_PROBE = """
+(function () {
+  if (window.__tvLiveProbeInstalled) return;
+  window.__tvLiveProbeInstalled = true;
+  var reported = false;
+  function report(video) {
+    if (reported || !video || video.videoWidth <= 0 || video.videoHeight <= 0) return;
+    reported = true;
+    try {
+      if (window.TVLiveBridge && window.TVLiveBridge.onFirstFrame) {
+        window.TVLiveBridge.onFirstFrame();
+      }
+    } catch (e) {}
+    try {
+      document.querySelectorAll('video').forEach(function (v) { v.muted = false; });
+    } catch (e) {}
+  }
+  function scan() {
+    var videos = document.querySelectorAll('video');
+    videos.forEach(function (video) {
+      if (!reported) video.muted = true;
+      if (video.readyState >= 2 && video.videoWidth > 0 && video.videoHeight > 0) {
+        if (video.requestVideoFrameCallback) {
+          video.requestVideoFrameCallback(function () { report(video); });
+        } else if (!video.__tvLiveFrameWatch) {
+          video.__tvLiveFrameWatch = true;
+          video.addEventListener('playing', function () { report(video); }, { once: true });
+        }
+      }
+    });
+  }
+  document.addEventListener('play', function (event) {
+    if (!reported && event.target && event.target.tagName === 'VIDEO') event.target.muted = true;
+    scan();
+  }, true);
+  scan();
+  setInterval(scan, 500);
+})();
+"""
