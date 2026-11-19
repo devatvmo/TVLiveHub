@@ -2,9 +2,11 @@ package tv.livehub.app
 
 import android.content.pm.ActivityInfo
 import android.os.Bundle
+import android.os.SystemClock
 import android.view.KeyEvent
 import android.view.View
 import android.view.WindowManager
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
@@ -23,6 +25,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -67,13 +70,18 @@ class MainActivity : ComponentActivity() {
     private val remoteController = LiveRemoteController()
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
-        // Intercept D-pad before WebView or its fullscreen custom view can consume it.
-        if (event.action == KeyEvent.ACTION_DOWN && remoteController.dispatch(event.keyCode)) return true
+        // Intercept D-pad/back before WebView or its fullscreen custom view can consume them.
+        if (event.action == KeyEvent.ACTION_DOWN) {
+            // Ignore BACK key repeats: a long press must not count as two presses to exit.
+            if (event.keyCode == KeyEvent.KEYCODE_BACK && event.repeatCount > 0) return true
+            if (remoteController.dispatch(event.keyCode)) return true
+        }
         return super.dispatchKeyEvent(event)
     }
 
     // Fallback for TV remotes whose key events reach Activity.onKeyDown after decor dispatch.
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
+        if (keyCode == KeyEvent.KEYCODE_BACK && event.repeatCount > 0) return true
         if (remoteController.dispatch(keyCode)) return true
         return super.onKeyDown(keyCode, event)
     }
@@ -129,13 +137,35 @@ private fun TvLiveScreen(channels: List<TvChannel>, remoteController: LiveRemote
     val drawerFocusRequester = remember { FocusRequester() }
     var drawerFocusedIndex by remember { mutableIntStateOf(0) }
 
-    BackHandler {
+    val context = LocalContext.current
+    val activity = context as? ComponentActivity
+    var lastBackPressedAt by remember { mutableLongStateOf(0L) }
+
+    // One back-state machine is shared by Activity key dispatch and Compose system back.
+    // Drawer -> Home -> double-back exit, matching the reference TV app's behavior.
+    val handleBack = {
         when {
-            drawerOpen -> drawerOpen = false
-            page == "live" -> page = "home"
-            else -> Unit
+            drawerOpen -> {
+                drawerOpen = false
+                lastBackPressedAt = 0L
+            }
+            page == "live" -> {
+                page = "home"
+                lastBackPressedAt = 0L
+            }
+            else -> {
+                val now = SystemClock.elapsedRealtime()
+                if (lastBackPressedAt != 0L && now - lastBackPressedAt <= 2000L) {
+                    lastBackPressedAt = 0L
+                    activity?.finishAndRemoveTask()
+                } else {
+                    lastBackPressedAt = now
+                    Toast.makeText(context, "再按一次返回键退出 TVLive", Toast.LENGTH_SHORT).show()
+                }
+            }
         }
     }
+    BackHandler(onBack = handleBack)
 
     // Keep the Activity-level key dispatcher registered continuously.
     // SideEffect refreshes the lambda after state changes without a null-listener gap.
@@ -169,10 +199,10 @@ private fun TvLiveScreen(channels: List<TvChannel>, remoteController: LiveRemote
                     reloadToken++; firstFrame = false; playbackError = null; noContentHint = false; infoVisible = true
                     true
                 } else false
-                KeyEvent.KEYCODE_BACK -> if (page == "live") {
-                    if (drawerOpen) drawerOpen = false else page = "home"
+                KeyEvent.KEYCODE_BACK -> {
+                    handleBack()
                     true
-                } else false
+                }
                 else -> false
             }
         }
@@ -336,7 +366,7 @@ private fun HomeScreen(
                 }
             }
             Spacer(Modifier.weight(1f))
-            Text("← → 选择频道    确定进入直播    返回退出", color = Color(0x99FFFFFF), fontSize = 13.sp)
+            Text("← → 选择频道    确定进入直播    返回两次退出", color = Color(0x99FFFFFF), fontSize = 13.sp)
         }
     }
 }
