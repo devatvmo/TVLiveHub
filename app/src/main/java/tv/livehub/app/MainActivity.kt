@@ -143,7 +143,7 @@ private fun TvLiveScreen(channels: List<TvChannel>, remoteController: LiveRemote
 
     // One back-state machine is shared by Activity key dispatch and Compose system back.
     // Drawer -> Home -> double-back exit, matching the reference TV app's behavior.
-    val handleBack = {
+    val handleBack: () -> Unit = {
         when {
             drawerOpen -> {
                 drawerOpen = false
