@@ -323,7 +323,7 @@ private fun HomeScreen(
     onOpenLive: (Int) -> Unit
 ) {
     val provinces = remember(channels) { channels.map { it.province }.distinct() }
-    var selectedProvinceIndex by remember(selectedIndex) { mutableIntStateOf(channels.indexOfFirst { it.id == channels[selectedIndex].id }.let { selected -> provinces.indexOf(channels[selected].province).coerceAtLeast(0) }) }
+    var selectedProvinceIndex by remember(selectedIndex) { mutableIntStateOf(provinces.indexOf(channels[selectedIndex].province).coerceAtLeast(0)) }
     var focusedChannelIndex by remember { mutableIntStateOf(0) }
     var tabsFocused by remember { mutableStateOf(true) }
     val currentProvince = provinces[selectedProvinceIndex.coerceIn(provinces.indices)]
