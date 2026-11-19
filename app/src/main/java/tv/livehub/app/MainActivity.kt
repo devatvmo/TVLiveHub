@@ -16,6 +16,7 @@ import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -52,6 +53,7 @@ private data class TvChannel(
     val id: String,
     val name: String,
     val group: String,
+    val province: String,
     val officialPage: String
 )
 
@@ -60,12 +62,18 @@ private data class TvChannel(
  * Actual playback and first-frame behavior must be checked on the target TV box.
  */
 private val initialChannels = listOf(
-    TvChannel("cctv1", "CCTV-1 综合", "中央电视台", "https://tv.cctv.com/live/cctv1/"),
-    TvChannel("cctv2", "CCTV-2 财经", "中央电视台", "https://tv.cctv.com/live/cctv2/"),
-    TvChannel("cctv3", "CCTV-3 综艺", "中央电视台", "https://tv.cctv.com/live/cctv3/"),
-    TvChannel("cctv13", "CCTV-13 新闻", "中央电视台", "https://tv.cctv.com/live/cctv13/"),
-    TvChannel("zhejiang-live", "浙江广电直播", "浙江广电", "https://www.cztv.com/liveTV"),
-    TvChannel("nmtv-live", "内蒙古广电", "内蒙古广播电视台", "https://www.nmtv.cn/")
+    TvChannel("cctv1", "CCTV-1 综合", "中央电视台", "中央台", "https://tv.cctv.com/live/cctv1/"),
+    TvChannel("cctv2", "CCTV-2 财经", "中央电视台", "中央台", "https://tv.cctv.com/live/cctv2/"),
+    TvChannel("cctv3", "CCTV-3 综艺", "中央电视台", "中央台", "https://tv.cctv.com/live/cctv3/"),
+    TvChannel("cctv13", "CCTV-13 新闻", "中央电视台", "中央台", "https://tv.cctv.com/live/cctv13/"),
+    TvChannel("zhejiang-live", "浙江广电直播", "浙江广电", "浙江", "https://www.cztv.com/liveTV"),
+    TvChannel("nmtv-live", "内蒙古广电", "内蒙古广播电视台", "内蒙古", "https://www.nmtv.cn/"),
+    TvChannel("gdtv-live", "广东广电", "广东广播电视台", "广东", "https://www.gdtv.cn/tvChannelDetail/43"),
+    TvChannel("sztv-live", "深圳广电", "深圳广播电影电视集团", "广东", "https://www.sztv.com.cn/dianshi.shtml?id=7868"),
+    TvChannel("gxtv-live", "广西广电", "广西广播电视台", "广西", "https://tv.gxtv.cn/channel/channelivePlay_5e923d82058e11e9ba67e41f13b60c62.html"),
+    TvChannel("yntv-live", "云南广电", "云南广播电视台", "云南", "https://www.yntv.cn/live.html"),
+    TvChannel("hh-tv", "红河广电", "红河州广播电视台", "云南", "https://www.hh.cn/ynhhzMini/site/tv"),
+    TvChannel("gzstv-live", "贵州广电", "贵州广播电视台", "贵州", "https://www.gzstv.com/tv/ch01")
 )
 
 class MainActivity : ComponentActivity() {
@@ -314,7 +322,23 @@ private fun HomeScreen(
     focusRequester: FocusRequester,
     onOpenLive: (Int) -> Unit
 ) {
-    var focusedIndex by remember { mutableIntStateOf(0) }
+    val provinces = remember(channels) { channels.map { it.province }.distinct() }
+    var selectedProvinceIndex by remember { mutableIntStateOf(0) }
+    var focusedChannelIndex by remember { mutableIntStateOf(0) }
+    var tabsFocused by remember { mutableStateOf(true) }
+    val currentProvince = provinces[selectedProvinceIndex.coerceIn(provinces.indices)]
+    val provinceChannels = remember(channels, currentProvince) {
+        channels.mapIndexed { index, channel -> index to channel }
+            .filter { it.second.province == currentProvince }
+    }
+    val rows = provinceChannels.chunked(3)
+    val listState = rememberLazyListState()
+
+    LaunchedEffect(selectedProvinceIndex, focusedChannelIndex, tabsFocused) {
+        if (!tabsFocused && rows.isNotEmpty()) {
+            listState.animateScrollToItem((focusedChannelIndex / 3).coerceIn(rows.indices))
+        }
+    }
 
     Box(
         modifier = Modifier
@@ -326,69 +350,124 @@ private fun HomeScreen(
                 if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                 when (event.key) {
                     Key.DirectionLeft -> {
-                        val rowStart = (focusedIndex / 3) * 3
-                        focusedIndex = if (focusedIndex == rowStart) minOf(rowStart + 2, channels.lastIndex) else focusedIndex - 1
+                        if (tabsFocused) {
+                            selectedProvinceIndex = (selectedProvinceIndex - 1 + provinces.size) % provinces.size
+                            focusedChannelIndex = 0
+                        } else {
+                            val rowStart = (focusedChannelIndex / 3) * 3
+                            focusedChannelIndex = if (focusedChannelIndex == rowStart) minOf(rowStart + 2, provinceChannels.lastIndex) else focusedChannelIndex - 1
+                        }
                         true
                     }
                     Key.DirectionRight -> {
-                        val rowStart = (focusedIndex / 3) * 3
-                        val rowEnd = minOf(rowStart + 2, channels.lastIndex)
-                        focusedIndex = if (focusedIndex >= rowEnd) rowStart else focusedIndex + 1
+                        if (tabsFocused) {
+                            selectedProvinceIndex = (selectedProvinceIndex + 1) % provinces.size
+                            focusedChannelIndex = 0
+                        } else {
+                            val rowStart = (focusedChannelIndex / 3) * 3
+                            val rowEnd = minOf(rowStart + 2, provinceChannels.lastIndex)
+                            focusedChannelIndex = if (focusedChannelIndex >= rowEnd) rowStart else focusedChannelIndex + 1
+                        }
                         true
                     }
                     Key.DirectionUp -> {
-                        if (focusedIndex >= 3) focusedIndex -= 3
-                        true
+                        if (tabsFocused) true
+                        else if (focusedChannelIndex < 3) {
+                            tabsFocused = true
+                            true
+                        } else {
+                            focusedChannelIndex -= 3
+                            true
+                        }
                     }
                     Key.DirectionDown -> {
-                        if (focusedIndex + 3 <= channels.lastIndex) focusedIndex += 3
+                        if (tabsFocused) {
+                            tabsFocused = false
+                            focusedChannelIndex = 0
+                        } else {
+                            if (focusedChannelIndex + 3 < provinceChannels.size) focusedChannelIndex += 3
+                        }
                         true
                     }
                     Key.DirectionCenter, Key.Enter, Key.NumPadEnter -> {
-                        onOpenLive(focusedIndex.coerceIn(channels.indices))
+                        if (tabsFocused) {
+                            tabsFocused = false
+                            focusedChannelIndex = 0
+                        } else {
+                            provinceChannels.getOrNull(focusedChannelIndex)?.first?.let(onOpenLive)
+                        }
                         true
                     }
                     else -> false
                 }
             }
     ) {
-        Column(
-            modifier = Modifier.fillMaxSize().padding(horizontal = 64.dp, vertical = 46.dp)
-        ) {
+        Column(Modifier.fillMaxSize().padding(horizontal = 64.dp, vertical = 34.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 Text("TVLive", color = Color.White, fontSize = 34.sp)
                 Text("官方直播", color = Accent, fontSize = 18.sp)
             }
-            Spacer(Modifier.height(42.dp))
-            Text("电视直播", color = Color.White, fontSize = 28.sp)
-            Text("选择频道开始观看", color = SecondaryText, fontSize = 15.sp, modifier = Modifier.padding(top = 6.dp))
-            Spacer(Modifier.height(26.dp))
-            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                channels.chunked(3).forEachIndexed { rowIndex, rowChannels ->
-                    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                        rowChannels.forEachIndexed { columnIndex, channel ->
-                            val index = rowIndex * 3 + columnIndex
-                            val focused = focusedIndex == index
+            Spacer(Modifier.height(22.dp))
+            Text("按省份选择频道", color = Color.White, fontSize = 27.sp)
+            Text("选择省级标签，查看该地区的广电频道", color = SecondaryText, fontSize = 15.sp, modifier = Modifier.padding(top = 6.dp))
+            Spacer(Modifier.height(20.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                provinces.forEachIndexed { index, province ->
+                    val selected = selectedProvinceIndex == index
+                    val focused = tabsFocused && selected
+                    Surface(
+                        color = if (selected) Color(0xFF244875) else Panel,
+                        border = if (focused) BorderStroke(2.dp, Accent) else null,
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.weight(1f).height(54.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Text(province, color = if (selected) Color.White else SecondaryText, fontSize = 17.sp)
+                        }
+                    }
+                }
+            }
+            Spacer(Modifier.height(18.dp))
+            Text("$currentProvince · ${provinceChannels.size} 个频道", color = Color(0xFFD8E6F8), fontSize = 17.sp)
+            Spacer(Modifier.height(12.dp))
+            LazyColumn(
+                state = listState,
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                itemsIndexed(rows, key = { index, _ -> "channel-row-$index" }) { rowIndex, rowChannels ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.fillMaxWidth()) {
+                        rowChannels.forEachIndexed { columnIndex, entry ->
+                            val (globalIndex, channel) = entry
+                            val localIndex = rowIndex * 3 + columnIndex
+                            val focused = !tabsFocused && focusedChannelIndex == localIndex
+                            val isPlaying = globalIndex == selectedIndex
                             Surface(
                                 color = if (focused) Color(0xFF244875) else Panel,
                                 border = if (focused) BorderStroke(2.dp, Accent) else null,
                                 shape = RoundedCornerShape(16.dp),
-                                modifier = Modifier.width(250.dp).height(160.dp)
+                                modifier = Modifier.weight(1f).height(142.dp)
                             ) {
-                                Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.SpaceBetween) {
-                                    Text(if (index == selectedIndex) "继续观看" else "频道", color = if (focused) Color.White else SecondaryText, fontSize = 14.sp)
+                                Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.SpaceBetween) {
+                                    Text(if (isPlaying) "继续观看" else "频道", color = if (focused) Color.White else SecondaryText, fontSize = 14.sp)
                                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                        Text(channel.name, color = Color.White, fontSize = 25.sp)
+                                        Text(channel.name, color = Color.White, fontSize = 23.sp)
                                         Text(channel.group, color = SecondaryText, fontSize = 13.sp)
                                     }
                                 }
                             }
                         }
+                        repeat(3 - rowChannels.size) { Spacer(Modifier.weight(1f)) }
                     }
                 }
             }
-            Spacer(Modifier.weight(1f))
-            Text("← → 选择频道    确定进入直播    返回两次退出", color = Color(0x99FFFFFF), fontSize = 13.sp)
+            Spacer(Modifier.height(12.dp))
+            Text(
+                if (tabsFocused) "← → 切换省份    ↓ / 确定 进入频道    返回两次退出"
+                else "← → ↑ ↓ 选择频道    ↑ 回到省份标签    确定进入直播",
+                color = Color(0x99FFFFFF),
+                fontSize = 13.sp
+            )
         }
     }
 }
