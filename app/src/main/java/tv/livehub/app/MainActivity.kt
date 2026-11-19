@@ -365,7 +365,7 @@ private fun HomeScreen(
             Spacer(Modifier.height(26.dp))
             Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 channels.chunked(3).forEachIndexed { rowIndex, rowChannels ->
-                    Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                         rowChannels.forEachIndexed { columnIndex, channel ->
                             val index = rowIndex * 3 + columnIndex
                             val focused = focusedIndex == index
@@ -373,7 +373,7 @@ private fun HomeScreen(
                                 color = if (focused) Color(0xFF244875) else Panel,
                                 border = if (focused) BorderStroke(2.dp, Accent) else null,
                                 shape = RoundedCornerShape(16.dp),
-                                modifier = Modifier.width(300.dp).height(170.dp)
+                                modifier = Modifier.width(250.dp).height(160.dp)
                             ) {
                                 Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.SpaceBetween) {
                                     Text(if (index == selectedIndex) "继续观看" else "频道", color = if (focused) Color.White else SecondaryText, fontSize = 14.sp)
