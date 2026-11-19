@@ -63,7 +63,9 @@ private val initialChannels = listOf(
     TvChannel("cctv1", "CCTV-1 综合", "中央电视台", "https://tv.cctv.com/live/cctv1/"),
     TvChannel("cctv2", "CCTV-2 财经", "中央电视台", "https://tv.cctv.com/live/cctv2/"),
     TvChannel("cctv3", "CCTV-3 综艺", "中央电视台", "https://tv.cctv.com/live/cctv3/"),
-    TvChannel("cctv13", "CCTV-13 新闻", "中央电视台", "https://tv.cctv.com/live/cctv13/")
+    TvChannel("cctv13", "CCTV-13 新闻", "中央电视台", "https://tv.cctv.com/live/cctv13/"),
+    TvChannel("zhejiang-live", "浙江广电直播", "浙江广电", "https://www.cztv.com/liveTV"),
+    TvChannel("nmtv-live", "内蒙古广电", "内蒙古广播电视台", "https://www.nmtv.cn/")
 )
 
 class MainActivity : ComponentActivity() {
@@ -323,10 +325,25 @@ private fun HomeScreen(
             .onPreviewKeyEvent { event ->
                 if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                 when (event.key) {
-                    Key.DirectionLeft -> { focusedIndex = (focusedIndex - 1 + channels.size) % channels.size; true }
-                    Key.DirectionRight -> { focusedIndex = (focusedIndex + 1) % channels.size; true }
-                    Key.DirectionUp -> { focusedIndex = 0; true }
-                    Key.DirectionDown -> { focusedIndex = minOf(1, channels.lastIndex); true }
+                    Key.DirectionLeft -> {
+                        val rowStart = (focusedIndex / 3) * 3
+                        focusedIndex = if (focusedIndex == rowStart) minOf(rowStart + 2, channels.lastIndex) else focusedIndex - 1
+                        true
+                    }
+                    Key.DirectionRight -> {
+                        val rowStart = (focusedIndex / 3) * 3
+                        val rowEnd = minOf(rowStart + 2, channels.lastIndex)
+                        focusedIndex = if (focusedIndex >= rowEnd) rowStart else focusedIndex + 1
+                        true
+                    }
+                    Key.DirectionUp -> {
+                        if (focusedIndex >= 3) focusedIndex -= 3
+                        true
+                    }
+                    Key.DirectionDown -> {
+                        if (focusedIndex + 3 <= channels.lastIndex) focusedIndex += 3
+                        true
+                    }
                     Key.DirectionCenter, Key.Enter, Key.NumPadEnter -> {
                         onOpenLive(focusedIndex.coerceIn(channels.indices))
                         true
@@ -346,20 +363,25 @@ private fun HomeScreen(
             Text("电视直播", color = Color.White, fontSize = 28.sp)
             Text("选择频道开始观看", color = SecondaryText, fontSize = 15.sp, modifier = Modifier.padding(top = 6.dp))
             Spacer(Modifier.height(26.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
-                channels.forEachIndexed { index, channel ->
-                    val focused = focusedIndex == index
-                    Surface(
-                        color = if (focused) Color(0xFF244875) else Panel,
-                        border = if (focused) BorderStroke(2.dp, Accent) else null,
-                        shape = RoundedCornerShape(16.dp),
-                        modifier = Modifier.width(300.dp).height(170.dp)
-                    ) {
-                        Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.SpaceBetween) {
-                            Text(if (index == selectedIndex) "继续观看" else "频道", color = if (focused) Color.White else SecondaryText, fontSize = 14.sp)
-                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                Text(channel.name, color = Color.White, fontSize = 25.sp)
-                                Text(channel.group, color = SecondaryText, fontSize = 13.sp)
+            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                channels.chunked(3).forEachIndexed { rowIndex, rowChannels ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+                        rowChannels.forEachIndexed { columnIndex, channel ->
+                            val index = rowIndex * 3 + columnIndex
+                            val focused = focusedIndex == index
+                            Surface(
+                                color = if (focused) Color(0xFF244875) else Panel,
+                                border = if (focused) BorderStroke(2.dp, Accent) else null,
+                                shape = RoundedCornerShape(16.dp),
+                                modifier = Modifier.width(300.dp).height(170.dp)
+                            ) {
+                                Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.SpaceBetween) {
+                                    Text(if (index == selectedIndex) "继续观看" else "频道", color = if (focused) Color.White else SecondaryText, fontSize = 14.sp)
+                                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        Text(channel.name, color = Color.White, fontSize = 25.sp)
+                                        Text(channel.group, color = SecondaryText, fontSize = 13.sp)
+                                    }
+                                }
                             }
                         }
                     }
@@ -442,7 +464,7 @@ private fun ChannelDrawer(
         modifier.padding(start = 26.dp, end = 20.dp, top = 28.dp, bottom = 22.dp)
     ) {
         Text("频道列表", color = Color.White, fontSize = 27.sp)
-        Text("中央电视台 · 官方网页入口", color = SecondaryText, fontSize = 14.sp)
+        Text("官方频道 · 官方网页入口", color = SecondaryText, fontSize = 14.sp)
         Spacer(Modifier.height(22.dp))
         LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             itemsIndexed(channels, key = { _, channel -> channel.id }) { index, channel ->
