@@ -2,16 +2,15 @@ package tv.livehub.app
 
 import android.content.pm.ActivityInfo
 import android.os.Bundle
-import android.os.SystemClock
 import android.view.KeyEvent
 import android.view.View
 import android.view.WindowManager
-import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -149,39 +148,52 @@ private fun TvLiveScreen(channels: List<TvChannel>, remoteController: LiveRemote
 
     val context = LocalContext.current
     val activity = context as? ComponentActivity
-    var lastBackPressedAt by remember { mutableLongStateOf(0L) }
+    // Exit-confirm dialog state. First BACK on home shows a centered dialog; a second
+    // BACK while it is visible actually exits. Any other key or a timeout dismisses it.
+    var exitDialogVisible by remember { mutableStateOf(false) }
 
     // One back-state machine is shared by Activity key dispatch and Compose system back.
-    // Drawer -> Home -> double-back exit, matching the reference TV app's behavior.
+    // Drawer -> Home -> exit-confirm dialog -> exit, matching the reference TV app's behavior.
     val handleBack: () -> Unit = {
         when {
             drawerOpen -> {
                 drawerOpen = false
-                lastBackPressedAt = 0L
+                exitDialogVisible = false
             }
             page == "live" -> {
                 page = "home"
-                lastBackPressedAt = 0L
+                exitDialogVisible = false
             }
             else -> {
-                val now = SystemClock.elapsedRealtime()
-                if (lastBackPressedAt != 0L && now - lastBackPressedAt <= 2000L) {
-                    lastBackPressedAt = 0L
+                if (exitDialogVisible) {
+                    exitDialogVisible = false
                     activity?.finishAndRemoveTask()
                 } else {
-                    lastBackPressedAt = now
-                    Toast.makeText(context, "再按一次返回键退出 TVLive", Toast.LENGTH_SHORT).show()
+                    exitDialogVisible = true
                 }
             }
         }
     }
     BackHandler(onBack = handleBack)
 
+    // Auto-dismiss the exit dialog after 3s so it never lingers on screen.
+    LaunchedEffect(exitDialogVisible) {
+        if (exitDialogVisible) {
+            delay(3000)
+            exitDialogVisible = false
+        }
+    }
+
     // Keep the Activity-level key dispatcher registered continuously.
     // SideEffect refreshes the lambda after state changes without a null-listener gap.
     SideEffect {
         remoteController.onKey = { code ->
-            when (code) {
+            // While the exit dialog is up, swallow every key except BACK so the
+            // underlying home screen cannot be operated. Any such key cancels the dialog.
+            if (exitDialogVisible && code != KeyEvent.KEYCODE_BACK) {
+                exitDialogVisible = false
+                true
+            } else when (code) {
                 KeyEvent.KEYCODE_DPAD_LEFT -> if (page == "live") {
                     drawerFocusedIndex = selectedIndex
                     drawerOpen = true
@@ -230,18 +242,23 @@ private fun TvLiveScreen(channels: List<TvChannel>, remoteController: LiveRemote
     }
 
     if (page == "home") {
-        HomeScreen(
-            channels = channels,
-            selectedIndex = selectedIndex,
-            focusRequester = homeFocusRequester,
-            onOpenLive = {
-                selectedIndex = it
-                page = "live"
-                reloadToken++
-                firstFrame = false
-                playbackError = null
+        Box(Modifier.fillMaxSize()) {
+            HomeScreen(
+                channels = channels,
+                selectedIndex = selectedIndex,
+                focusRequester = homeFocusRequester,
+                onOpenLive = {
+                    selectedIndex = it
+                    page = "live"
+                    reloadToken++
+                    firstFrame = false
+                    playbackError = null
+                }
+            )
+            if (exitDialogVisible) {
+                ExitConfirmDialog(onDismiss = { exitDialogVisible = false })
             }
-        )
+        }
         return
     }
 
@@ -566,5 +583,61 @@ private fun ChannelDrawer(
         }
         Spacer(Modifier.weight(1f))
         Text("上下选择 · 确定播放 · 左键/返回关闭", color = SecondaryText, fontSize = 12.sp)
+    }
+}
+
+/**
+ * Centered exit-confirmation dialog shown on the home screen after the first BACK press.
+ * A second BACK press (handled by [handleBack]) exits the app; any other key or a timeout
+ * dismisses it. Rendered as a native Composable overlay with a full-screen dim layer so it
+ * is independent of any WebView content.
+ */
+@Composable
+private fun ExitConfirmDialog(onDismiss: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xCC000000))
+            .clickable(onClick = onDismiss)
+            .zIndex(20f),
+        contentAlignment = Alignment.Center
+    ) {
+        Surface(
+            color = Panel,
+            shape = RoundedCornerShape(18.dp),
+            border = BorderStroke(2.dp, Accent),
+            shadowElevation = 24.dp,
+            modifier = Modifier
+                .widthIn(min = 520.dp)
+                .clickable(onClick = {}) // consume clicks on the card itself
+        ) {
+            Column(
+                modifier = Modifier.padding(horizontal = 48.dp, vertical = 40.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(18.dp)
+            ) {
+                Surface(
+                    color = Accent.copy(alpha = 0.14f),
+                    shape = RoundedCornerShape(50),
+                    modifier = Modifier.size(76.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Text("⟲", color = Accent, fontSize = 40.sp)
+                    }
+                }
+                Text("退出 TVLive？", color = Color.White, fontSize = 30.sp)
+                Text(
+                    "再按一次返回键退出应用",
+                    color = SecondaryText,
+                    fontSize = 18.sp
+                )
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    "按其他任意键取消",
+                    color = Color(0x99FFFFFF),
+                    fontSize = 14.sp
+                )
+            }
+        }
     }
 }
