@@ -239,7 +239,7 @@ private fun TvLiveScreen(channels: List<TvChannel>, remoteController: LiveRemote
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Black)
-    ) {        key("\${selectedChannel.id}-\$reloadToken") {
+    ) {        key("${selectedChannel.id}-$reloadToken") {
             LivePlaybackSurface(
                 url = selectedChannel.officialPage,
                 playbackType = PlaybackType.OFFICIAL_WEBVIEW,
