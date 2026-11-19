@@ -2,9 +2,11 @@ package tv.livehub.app
 
 import android.content.pm.ActivityInfo
 import android.os.Bundle
+import android.os.SystemClock
 import android.view.KeyEvent
 import android.view.View
 import android.view.WindowManager
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
@@ -14,6 +16,7 @@ import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -23,6 +26,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -49,6 +53,7 @@ private data class TvChannel(
     val id: String,
     val name: String,
     val group: String,
+    val province: String,
     val officialPage: String
 )
 
@@ -57,23 +62,36 @@ private data class TvChannel(
  * Actual playback and first-frame behavior must be checked on the target TV box.
  */
 private val initialChannels = listOf(
-    TvChannel("cctv1", "CCTV-1 综合", "中央电视台", "https://tv.cctv.com/live/cctv1/"),
-    TvChannel("cctv2", "CCTV-2 财经", "中央电视台", "https://tv.cctv.com/live/cctv2/"),
-    TvChannel("cctv3", "CCTV-3 综艺", "中央电视台", "https://tv.cctv.com/live/cctv3/"),
-    TvChannel("cctv13", "CCTV-13 新闻", "中央电视台", "https://tv.cctv.com/live/cctv13/")
+    TvChannel("cctv1", "CCTV-1 综合", "中央电视台", "中央台", "https://tv.cctv.com/live/cctv1/"),
+    TvChannel("cctv2", "CCTV-2 财经", "中央电视台", "中央台", "https://tv.cctv.com/live/cctv2/"),
+    TvChannel("cctv3", "CCTV-3 综艺", "中央电视台", "中央台", "https://tv.cctv.com/live/cctv3/"),
+    TvChannel("cctv13", "CCTV-13 新闻", "中央电视台", "中央台", "https://tv.cctv.com/live/cctv13/"),
+    TvChannel("zhejiang-live", "浙江广电直播", "浙江广电", "浙江", "https://www.cztv.com/liveTV"),
+    TvChannel("nmtv-live", "内蒙古广电", "内蒙古广播电视台", "内蒙古", "https://www.nmtv.cn/"),
+    TvChannel("gdtv-live", "广东广电", "广东广播电视台", "广东", "https://www.gdtv.cn/tvChannelDetail/43"),
+    TvChannel("sztv-live", "深圳广电", "深圳广播电影电视集团", "广东", "https://www.sztv.com.cn/dianshi.shtml?id=7868"),
+    TvChannel("gxtv-live", "广西广电", "广西广播电视台", "广西", "https://tv.gxtv.cn/channel/channelivePlay_5e923d82058e11e9ba67e41f13b60c62.html"),
+    TvChannel("yntv-live", "云南广电", "云南广播电视台", "云南", "https://www.yntv.cn/live.html"),
+    TvChannel("hh-tv", "红河广电", "红河州广播电视台", "云南", "https://www.hh.cn/ynhhzMini/site/tv"),
+    TvChannel("gzstv-live", "贵州广电", "贵州广播电视台", "贵州", "https://www.gzstv.com/tv/ch01")
 )
 
 class MainActivity : ComponentActivity() {
     private val remoteController = LiveRemoteController()
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
-        // Intercept D-pad before WebView or its fullscreen custom view can consume it.
-        if (event.action == KeyEvent.ACTION_DOWN && remoteController.dispatch(event.keyCode)) return true
+        // Intercept D-pad/back before WebView or its fullscreen custom view can consume them.
+        if (event.action == KeyEvent.ACTION_DOWN) {
+            // Ignore BACK key repeats: a long press must not count as two presses to exit.
+            if (event.keyCode == KeyEvent.KEYCODE_BACK && event.repeatCount > 0) return true
+            if (remoteController.dispatch(event.keyCode)) return true
+        }
         return super.dispatchKeyEvent(event)
     }
 
     // Fallback for TV remotes whose key events reach Activity.onKeyDown after decor dispatch.
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
+        if (keyCode == KeyEvent.KEYCODE_BACK && event.repeatCount > 0) return true
         if (remoteController.dispatch(keyCode)) return true
         return super.onKeyDown(keyCode, event)
     }
@@ -129,13 +147,35 @@ private fun TvLiveScreen(channels: List<TvChannel>, remoteController: LiveRemote
     val drawerFocusRequester = remember { FocusRequester() }
     var drawerFocusedIndex by remember { mutableIntStateOf(0) }
 
-    BackHandler {
+    val context = LocalContext.current
+    val activity = context as? ComponentActivity
+    var lastBackPressedAt by remember { mutableLongStateOf(0L) }
+
+    // One back-state machine is shared by Activity key dispatch and Compose system back.
+    // Drawer -> Home -> double-back exit, matching the reference TV app's behavior.
+    val handleBack: () -> Unit = {
         when {
-            drawerOpen -> drawerOpen = false
-            page == "live" -> page = "home"
-            else -> Unit
+            drawerOpen -> {
+                drawerOpen = false
+                lastBackPressedAt = 0L
+            }
+            page == "live" -> {
+                page = "home"
+                lastBackPressedAt = 0L
+            }
+            else -> {
+                val now = SystemClock.elapsedRealtime()
+                if (lastBackPressedAt != 0L && now - lastBackPressedAt <= 2000L) {
+                    lastBackPressedAt = 0L
+                    activity?.finishAndRemoveTask()
+                } else {
+                    lastBackPressedAt = now
+                    Toast.makeText(context, "再按一次返回键退出 TVLive", Toast.LENGTH_SHORT).show()
+                }
+            }
         }
     }
+    BackHandler(onBack = handleBack)
 
     // Keep the Activity-level key dispatcher registered continuously.
     // SideEffect refreshes the lambda after state changes without a null-listener gap.
@@ -169,10 +209,10 @@ private fun TvLiveScreen(channels: List<TvChannel>, remoteController: LiveRemote
                     reloadToken++; firstFrame = false; playbackError = null; noContentHint = false; infoVisible = true
                     true
                 } else false
-                KeyEvent.KEYCODE_BACK -> if (page == "live") {
-                    if (drawerOpen) drawerOpen = false else page = "home"
+                KeyEvent.KEYCODE_BACK -> {
+                    handleBack()
                     true
-                } else false
+                }
                 else -> false
             }
         }
@@ -209,7 +249,7 @@ private fun TvLiveScreen(channels: List<TvChannel>, remoteController: LiveRemote
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Black)
-    ) {        key("\${selectedChannel.id}-\$reloadToken") {
+    ) {        key("${selectedChannel.id}-$reloadToken") {
             LivePlaybackSurface(
                 url = selectedChannel.officialPage,
                 playbackType = PlaybackType.OFFICIAL_WEBVIEW,
@@ -282,7 +322,23 @@ private fun HomeScreen(
     focusRequester: FocusRequester,
     onOpenLive: (Int) -> Unit
 ) {
-    var focusedIndex by remember { mutableIntStateOf(0) }
+    val provinces = remember(channels) { channels.map { it.province }.distinct() }
+    var selectedProvinceIndex by remember(selectedIndex) { mutableIntStateOf(provinces.indexOf(channels[selectedIndex].province).coerceAtLeast(0)) }
+    var focusedChannelIndex by remember { mutableIntStateOf(0) }
+    var tabsFocused by remember { mutableStateOf(true) }
+    val currentProvince = provinces[selectedProvinceIndex.coerceIn(provinces.indices)]
+    val provinceChannels = remember(channels, currentProvince) {
+        channels.mapIndexed { index, channel -> index to channel }
+            .filter { it.second.province == currentProvince }
+    }
+    val rows = provinceChannels.chunked(3)
+    val listState = rememberLazyListState()
+
+    LaunchedEffect(selectedProvinceIndex, focusedChannelIndex, tabsFocused) {
+        if (!tabsFocused && rows.isNotEmpty()) {
+            listState.animateScrollToItem((focusedChannelIndex / 3).coerceIn(rows.indices))
+        }
+    }
 
     Box(
         modifier = Modifier
@@ -293,50 +349,125 @@ private fun HomeScreen(
             .onPreviewKeyEvent { event ->
                 if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                 when (event.key) {
-                    Key.DirectionLeft -> { focusedIndex = (focusedIndex - 1 + channels.size) % channels.size; true }
-                    Key.DirectionRight -> { focusedIndex = (focusedIndex + 1) % channels.size; true }
-                    Key.DirectionUp -> { focusedIndex = 0; true }
-                    Key.DirectionDown -> { focusedIndex = minOf(1, channels.lastIndex); true }
+                    Key.DirectionLeft -> {
+                        if (tabsFocused) {
+                            selectedProvinceIndex = (selectedProvinceIndex - 1 + provinces.size) % provinces.size
+                            focusedChannelIndex = 0
+                        } else {
+                            val rowStart = (focusedChannelIndex / 3) * 3
+                            focusedChannelIndex = if (focusedChannelIndex == rowStart) minOf(rowStart + 2, provinceChannels.lastIndex) else focusedChannelIndex - 1
+                        }
+                        true
+                    }
+                    Key.DirectionRight -> {
+                        if (tabsFocused) {
+                            selectedProvinceIndex = (selectedProvinceIndex + 1) % provinces.size
+                            focusedChannelIndex = 0
+                        } else {
+                            val rowStart = (focusedChannelIndex / 3) * 3
+                            val rowEnd = minOf(rowStart + 2, provinceChannels.lastIndex)
+                            focusedChannelIndex = if (focusedChannelIndex >= rowEnd) rowStart else focusedChannelIndex + 1
+                        }
+                        true
+                    }
+                    Key.DirectionUp -> {
+                        if (tabsFocused) true
+                        else if (focusedChannelIndex < 3) {
+                            tabsFocused = true
+                            true
+                        } else {
+                            focusedChannelIndex -= 3
+                            true
+                        }
+                    }
+                    Key.DirectionDown -> {
+                        if (tabsFocused) {
+                            tabsFocused = false
+                            focusedChannelIndex = 0
+                        } else {
+                            if (focusedChannelIndex + 3 < provinceChannels.size) focusedChannelIndex += 3
+                        }
+                        true
+                    }
                     Key.DirectionCenter, Key.Enter, Key.NumPadEnter -> {
-                        onOpenLive(focusedIndex.coerceIn(channels.indices))
+                        if (tabsFocused) {
+                            tabsFocused = false
+                            focusedChannelIndex = 0
+                        } else {
+                            provinceChannels.getOrNull(focusedChannelIndex)?.first?.let(onOpenLive)
+                        }
                         true
                     }
                     else -> false
                 }
             }
     ) {
-        Column(
-            modifier = Modifier.fillMaxSize().padding(horizontal = 64.dp, vertical = 46.dp)
-        ) {
+        Column(Modifier.fillMaxSize().padding(horizontal = 64.dp, vertical = 34.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 Text("TVLive", color = Color.White, fontSize = 34.sp)
                 Text("官方直播", color = Accent, fontSize = 18.sp)
             }
-            Spacer(Modifier.height(42.dp))
-            Text("电视直播", color = Color.White, fontSize = 28.sp)
-            Text("选择频道开始观看", color = SecondaryText, fontSize = 15.sp, modifier = Modifier.padding(top = 6.dp))
-            Spacer(Modifier.height(26.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
-                channels.forEachIndexed { index, channel ->
-                    val focused = focusedIndex == index
+            Spacer(Modifier.height(22.dp))
+            Text("按省份选择频道", color = Color.White, fontSize = 27.sp)
+            Text("选择省级标签，查看该地区的广电频道", color = SecondaryText, fontSize = 15.sp, modifier = Modifier.padding(top = 6.dp))
+            Spacer(Modifier.height(20.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                provinces.forEachIndexed { index, province ->
+                    val selected = selectedProvinceIndex == index
+                    val focused = tabsFocused && selected
                     Surface(
-                        color = if (focused) Color(0xFF244875) else Panel,
+                        color = if (selected) Color(0xFF244875) else Panel,
                         border = if (focused) BorderStroke(2.dp, Accent) else null,
-                        shape = RoundedCornerShape(16.dp),
-                        modifier = Modifier.width(300.dp).height(170.dp)
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.weight(1f).height(54.dp)
                     ) {
-                        Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.SpaceBetween) {
-                            Text(if (index == selectedIndex) "继续观看" else "频道", color = if (focused) Color.White else SecondaryText, fontSize = 14.sp)
-                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                Text(channel.name, color = Color.White, fontSize = 25.sp)
-                                Text(channel.group, color = SecondaryText, fontSize = 13.sp)
-                            }
+                        Box(contentAlignment = Alignment.Center) {
+                            Text(province, color = if (selected) Color.White else SecondaryText, fontSize = 17.sp)
                         }
                     }
                 }
             }
-            Spacer(Modifier.weight(1f))
-            Text("← → 选择频道    确定进入直播    返回退出", color = Color(0x99FFFFFF), fontSize = 13.sp)
+            Spacer(Modifier.height(18.dp))
+            Text("$currentProvince · ${provinceChannels.size} 个频道", color = Color(0xFFD8E6F8), fontSize = 17.sp)
+            Spacer(Modifier.height(12.dp))
+            LazyColumn(
+                state = listState,
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                itemsIndexed(rows, key = { index, _ -> "channel-row-$index" }) { rowIndex, rowChannels ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.fillMaxWidth()) {
+                        rowChannels.forEachIndexed { columnIndex, entry ->
+                            val (globalIndex, channel) = entry
+                            val localIndex = rowIndex * 3 + columnIndex
+                            val focused = !tabsFocused && focusedChannelIndex == localIndex
+                            val isPlaying = globalIndex == selectedIndex
+                            Surface(
+                                color = if (focused) Color(0xFF244875) else Panel,
+                                border = if (focused) BorderStroke(2.dp, Accent) else null,
+                                shape = RoundedCornerShape(16.dp),
+                                modifier = Modifier.weight(1f).height(142.dp)
+                            ) {
+                                Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.SpaceBetween) {
+                                    Text(if (isPlaying) "继续观看" else "频道", color = if (focused) Color.White else SecondaryText, fontSize = 14.sp)
+                                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        Text(channel.name, color = Color.White, fontSize = 23.sp)
+                                        Text(channel.group, color = SecondaryText, fontSize = 13.sp)
+                                    }
+                                }
+                            }
+                        }
+                        repeat(3 - rowChannels.size) { Spacer(Modifier.weight(1f)) }
+                    }
+                }
+            }
+            Spacer(Modifier.height(12.dp))
+            Text(
+                if (tabsFocused) "← → 切换省份    ↓ / 确定 进入频道    返回两次退出"
+                else "← → ↑ ↓ 选择频道    ↑ 回到省份标签    确定进入直播",
+                color = Color(0x99FFFFFF),
+                fontSize = 13.sp
+            )
         }
     }
 }
@@ -412,7 +543,7 @@ private fun ChannelDrawer(
         modifier.padding(start = 26.dp, end = 20.dp, top = 28.dp, bottom = 22.dp)
     ) {
         Text("频道列表", color = Color.White, fontSize = 27.sp)
-        Text("中央电视台 · 官方网页入口", color = SecondaryText, fontSize = 14.sp)
+        Text("官方频道 · 官方网页入口", color = SecondaryText, fontSize = 14.sp)
         Spacer(Modifier.height(22.dp))
         LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             itemsIndexed(channels, key = { _, channel -> channel.id }) { index, channel ->

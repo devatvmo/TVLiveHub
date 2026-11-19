@@ -8,8 +8,14 @@
 | CCTV-13 新闻 | https://tv.cctv.com/live/cctv13/ | 官方 WebView 页面 | 待实机验证 | 页面入口已登记，未确认首帧/声音 |
 | 央视频 | https://www.yangshipin.cn/ | 待核验 | 待验证 | 需确认官方页面嵌入及播放授权 |
 | 北京广播电视台 | 待核验官方直播入口 | 待核验 | 待验证 | 不预设媒体地址 |
-| 内蒙古广播电视台 | https://www.nmtv.cn/ | 待核验 | 待验证 | 需定位具体官方直播页 |
-| 浙江广电 | https://www.cztv.com/ | 待核验 | 待验证 | 需定位具体官方直播页 |
+| 内蒙古广播电视台（奔腾融媒） | https://www.nmtv.cn/ | 官方 WebView 官网入口 | 待实机验证 | 官方官网入口已接入；具体电视频道直播页需继续定位 |
+| 浙江广电直播 | https://www.cztv.com/liveTV | 官方 WebView 直播页面 | 待实机验证 | 使用用户提供的官方直播入口，未确认首帧/声音 |
+| 广东广播电视台（荔枝网） | https://www.gdtv.cn/tvChannelDetail/43 | 官方 WebView 频道详情页 | 待实机验证 | 使用用户提供的荔枝网直播频道入口，未确认首帧/声音 |
+| 广西广播电视台 | https://tv.gxtv.cn/channel/channelivePlay_5e923d82058e11e9ba67e41f13b60c62.html | 官方 WebView 频道直播页 | 待实机验证 | 使用用户提供的广西广电官方直播入口，未确认首帧/声音 |
+| 云南广播电视台 | https://www.yntv.cn/live.html | 官方 WebView 直播页面 | 待实机验证 | 使用用户提供的云南广电官方直播入口，未确认首帧/声音 |
+| 云南·红河州广播电视台（红河） | https://www.hh.cn/ynhhzMini/site/tv | 官方 WebView 电视页面 | 待实机验证 | 作为云南省内红河州地方广电资源归入云南；使用用户提供的入口，未确认首帧/声音 |
+| 贵州广播电视台 | https://www.gzstv.com/tv/ch01 | 官方 WebView 频道直播页 | 待实机验证 | 使用用户提供的贵州广电官方直播入口，未确认首帧/声音 |
+| 深圳广播电影电视集团（深圳广电） | https://www.sztv.com.cn/dianshi.shtml?id=7868 | 官方 WebView 电视页面 | 待实机验证 | 使用用户提供的深圳广电官方电视页面，未确认首帧/声音 |
 
 ## 核验等级
 1. 官网可访问：仅确认域名/官网可打开。
