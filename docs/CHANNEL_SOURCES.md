@@ -13,6 +13,7 @@
 | 广东广播电视台（荔枝网） | https://www.gdtv.cn/tvChannelDetail/43 | 官方 WebView 频道详情页 | 待实机验证 | 使用用户提供的荔枝网直播频道入口，未确认首帧/声音 |
 | 广西广播电视台 | https://tv.gxtv.cn/channel/channelivePlay_5e923d82058e11e9ba67e41f13b60c62.html | 官方 WebView 频道直播页 | 待实机验证 | 使用用户提供的广西广电官方直播入口，未确认首帧/声音 |
 | 云南广播电视台 | https://www.yntv.cn/live.html | 官方 WebView 直播页面 | 待实机验证 | 使用用户提供的云南广电官方直播入口，未确认首帧/声音 |
+| 贵州广播电视台 | https://www.gzstv.com/tv/ch01 | 官方 WebView 频道直播页 | 待实机验证 | 使用用户提供的贵州广电官方直播入口，未确认首帧/声音 |
 
 ## 核验等级
 1. 官网可访问：仅确认域名/官网可打开。
