@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>TVLive</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{width:100%;height:100%;overflow:hidden;background:#0b0d12;color:#eef2f8;
+    font-family:"PingFang SC","Microsoft YaHei",system-ui,sans-serif;user-select:none}
+  :root{
+    --bg:#0b0d12;--panel:#141821;--line:#2a3140;--txt:#eef2f8;--muted:#8b95a8;--accent:#4f8cff;
+    --focus:#ffffff;
+  }
+  .wrap{width:100%;height:100%;padding:3.2vh 3vw 2vh;display:flex;flex-direction:column}
+
+  /* 顶部 */
+  .top{display:flex;justify-content:space-between;align-items:center;height:7vh;flex:none}
+  .brand{font-size:2.4vh;font-weight:500;letter-spacing:.5px;color:var(--txt)}
+  .brand b{color:var(--accent)}
+  .clock{font-size:1.8vh;color:var(--muted);display:flex;gap:2vw;align-items:center}
+  .dot{width:.9vh;height:.9vh;border-radius:50%;background:#3a4252}
+
+  /* 四张彩色大卡片 */
+  .hero-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:1.4vw;margin-top:1.5vh;flex:none}
+  .hero{height:24vh;border-radius:1.4vh;padding:2.4vh 2vw;position:relative;overflow:hidden;
+    display:flex;flex-direction:column;justify-content:space-between;
+    border:.3vh solid transparent;transition:transform .12s,border-color .12s}
+  .hero.focus{border-color:var(--focus);transform:translateY(-.6vh)}
+  .hero .ico{width:6vh;height:6vh;border-radius:1.4vh;background:rgba(255,255,255,.18);
+    display:flex;align-items:center;justify-content:center}
+  .hero .ico svg{width:3.4vh;height:3.4vh;fill:#fff}
+  .hero h2{font-size:2.8vh;font-weight:500}
+  .hero p{font-size:1.6vh;opacity:.85;margin-top:.6vh}
+  .hero .count{position:absolute;right:1.6vw;bottom:2.2vh;font-size:1.5vh;opacity:.85}
+  .h-live{background:#2f6df0}.h-guide{background:#8b5cf6}
+  .h-fav{background:#1aa87a}.h-set{background:#e0912f}
+
+  /* 功能行 */
+  .quick{display:grid;grid-template-columns:repeat(5,1fr);gap:1.1vw;margin-top:2.4vh;flex:none}
+  .q{height:7.4vh;background:var(--panel);border:.3vh solid transparent;border-radius:1.2vh;
+    display:flex;align-items:center;justify-content:center;gap:1vw;font-size:1.8vh;transition:.12s}
+  .q.focus{border-color:var(--focus);background:#1b202b}
+  .q svg{width:2.4vh;height:2.4vh;fill:var(--muted)}
+
+  .sec{font-size:2vh;color:var(--muted);margin:2.8vh 0 1.4vh;flex:none}
+  /* 继续观看 */
+  .continue{display:grid;grid-template-columns:repeat(4,1fr);gap:1.2vw;flex:1;min-height:0}
+  .cc{background:var(--panel);border:.3vh solid transparent;border-radius:1.2vh;overflow:hidden;
+    display:flex;flex-direction:column;transition:.12s}
+  .cc.focus{border-color:var(--focus)}
+  .cc .thumb{flex:1;min-height:0;display:flex;align-items:center;justify-content:center}
+  .cc .thumb span{font-size:1.5vh;background:rgba(0,0,0,.45);padding:.5vh 1vw;border-radius:.6vh}
+  .cc .bar{height:.4vh;background:rgba(255,255,255,.15);flex:none}
+  .cc .bar i{display:block;height:100%;background:var(--accent)}
+  .cc .meta{padding:1.2vh 1vw;flex:none}
+  .cc .meta h4{font-size:1.7vh;font-weight:500;margin-bottom:.5vh}
+  .cc .meta p{font-size:1.3vh;color:var(--muted)}
+
+  /* 底部按键提示 */
+  .keybar{height:4vh;flex:none;display:flex;justify-content:center;gap:3vw;align-items:center;
+    font-size:1.4vh;color:#6f798c}
+  kbd{background:#ffffff1c;border:1px solid #ffffff33;border-radius:.5vh;padding:.2vh .8vw;
+    font-family:inherit;font-size:1.3vh;margin:0 .2vw}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <div class="brand"><b>TV</b>Live · 客厅直播</div>
+    <div class="clock"><span id="clock">--:--</span><span class="dot"></span><span>央视 · 卫视 · 地方</span></div>
+  </div>
+
+  <div class="hero-grid">
+    <div class="hero h-live focus focusable" data-play="tvlive://play/0">
+      <div class="ico"><svg viewBox="0 0 24 24"><path d="M21 6H3a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h18a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2zm-9 12-5-4h10l-5 4z"/></svg></div>
+      <div><h2>直播</h2><p>全部频道实时播放</p></div>
+      <div class="count">进入</div>
+    </div>
+    <div class="hero h-guide focusable" data-play="tvlive://play/4">
+      <div class="ico"><svg viewBox="0 0 24 24"><path d="M3 5h18v14H3zm2 2v10h14V7zm2 2h6v2H7zm0 4h10v2H7z"/></svg></div>
+      <div><h2>节目单</h2><p>今日节目一览</p></div>
+      <div class="count">查看</div>
+    </div>
+    <div class="hero h-fav focusable" data-play="tvlive://play/8">
+      <div class="ico"><svg viewBox="0 0 24 24"><path d="M12 17.3l-6.2 3.7 1.6-7L2 9.2l7.2-.6L12 2l2.8 6.6 7.2.6-5.4 4.8 1.6 7z"/></svg></div>
+      <div><h2>收藏</h2><p>常看的都在这里</p></div>
+      <div class="count">我的</div>
+    </div>
+    <div class="hero h-set focusable" data-play="tvlive://play/12">
+      <div class="ico"><svg viewBox="0 0 24 24"><path d="M19.4 13a7.8 7.8 0 0 0 0-2l2.1-1.6-2-3.5-2.5 1a7.6 7.6 0 0 0-1.7-1L15 3h-4l-.4 2.5a7.6 7.6 0 0 0-1.7 1l-2.5-1-2 3.5L6.5 10a7.8 7.8 0 0 0 0 2l-2.1 1.6 2 3.5 2.5-1a7.6 7.6 0 0 0 1.7 1L11 20h4l.4-2.5a7.6 7.6 0 0 0 1.7-1l2.5 1 2-3.5zM13 15a3 3 0 1 1 0-6 3 3 0 0 1 0 6z"/></svg></div>
+      <div><h2>设置</h2><p>画面与遥控器</p></div>
+      <div class="count">通用</div>
+    </div>
+  </div>
+
+  <div class="quick">
+    <div class="q focusable" data-play="tvlive://play/0">继续观看</div>
+    <div class="q focusable" data-play="tvlive://play/1">观看历史</div>
+    <div class="q focusable" data-play="tvlive://play/2">回看</div>
+    <div class="q focusable" data-play="tvlive://play/8">我的收藏</div>
+    <div class="q focusable" data-play="tvlive://play/12">关于</div>
+  </div>
+
+  <div class="sec">继续观看</div>
+  <div class="continue">
+    <div class="cc focusable" data-play="tvlive://play/0"><div class="thumb" style="background:linear-gradient(135deg,#1e3a5f,#2a1a3a)"><span>CCTV-1 综合</span></div><div class="bar"><i style="width:62%"></i></div><div class="meta"><h4>新闻联播</h4><p>继续观看</p></div></div>
+    <div class="cc focusable" data-play="tvlive://play/4"><div class="thumb" style="background:linear-gradient(135deg,#3a1e1e,#1a2a3a)"><span>CCTV-5 体育</span></div><div class="bar"><i style="width:35%"></i></div><div class="meta"><h4>体育赛事</h4><p>继续观看</p></div></div>
+    <div class="cc focusable" data-play="tvlive://play/7"><div class="thumb" style="background:linear-gradient(135deg,#1e3a2a,#2a2a1a)"><span>CCTV-9 纪录</span></div><div class="bar"><i style="width:80%"></i></div><div class="meta"><h4>人与自然</h4><p>继续观看</p></div></div>
+    <div class="cc focusable" data-play="tvlive://play/8"><div class="thumb" style="background:linear-gradient(135deg,#2a1a3a,#1e2a3a)"><span>CCTV-13 新闻</span></div><div class="bar"><i style="width:18%"></i></div><div class="meta"><h4>新闻直播间</h4><p>继续观看</p></div></div>
+  </div>
+
+  <div class="keybar"><span><kbd>← → ↑ ↓</kbd>选择</span><span><kbd>OK</kbd>进入直播</span><span>上下键换台 · 左键频道列表</span></div>
+</div>
+
+<script>
+(function(){
+  var items = Array.prototype.slice.call(document.querySelectorAll('.focusable'));
+  var idx = 0;
+  // 每行元素数量：hero=4, quick=5, continue=4
+  var rowSizes = [4,5,4];
+  function rowOf(i){
+    if(i<4) return 0;
+    if(i<9) return 1;
+    return 2;
+  }
+  function rowStart(r){ return r===0?0:(r===1?4:9); }
+  function paint(){
+    for(var i=0;i<items.length;i++){
+      if(i===idx) items[i].classList.add('focus');
+      else items[i].classList.remove('focus');
+    }
+  }
+  // Android keyCode: 19上 20下 21左 22右 23/66 OK 4返回
+  window.onTvKey = function(k){
+    if(k===19){ // UP
+      var r=rowOf(idx);
+      if(r>0){ var nr=r-1; var col=idx-rowStart(r); idx=rowStart(nr)+Math.min(col,rowSizes[nr]-1); }
+    } else if(k===20){ // DOWN
+      var r=rowOf(idx);
+      if(r<2){ var nr=r+1; var col=idx-rowStart(r); idx=rowStart(nr)+Math.min(col,rowSizes[nr]-1); }
+    } else if(k===21){ // LEFT
+      var r=rowOf(idx), s=rowStart(r), n=rowSizes[r];
+      idx = s + ((idx-s-1+n)%n);
+    } else if(k===22){ // RIGHT
+      var r=rowOf(idx), s=rowStart(r), n=rowSizes[r];
+      idx = s + ((idx-s+1)%n);
+    } else if(k===23 || k===66){ // OK / ENTER
+      var url = items[idx].getAttribute('data-play');
+      if(url){ window.location.href = url; }
+      return;
+    } else if(k===4){ // BACK: 首页忽略，避免误退出
+      return;
+    }
+    paint();
+  };
+  function tick(){
+    var d=new Date();
+    var h=('0'+d.getHours()).slice(-2), m=('0'+d.getMinutes()).slice(-2);
+    var el=document.getElementById('clock'); if(el) el.textContent=h+':'+m;
+  }
+  tick(); setInterval(tick,30000); paint();
+})();
+</script>
+</body>
+</html>
